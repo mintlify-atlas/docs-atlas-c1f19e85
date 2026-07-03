@@ -1,5 +1,5 @@
 ---
-title: "Adobe Type Helpers: asAdobeType and isAdobeType"
+title: "Adobe ExtendScript Type Helpers: asAdobeType and isAdobeType"
 sidebarTitle: "Adobe Type Helpers"
 description: "Use asAdobeType<T>() and isAdobeType() to write type-safe custom matchers for Adobe objects like AVLayer, CompItem, FootageSource, and more."
 ---
@@ -97,6 +97,10 @@ const customMatchers: Matcher<any> = {
 ```
 
 ## Complete Adobe Matchers Example
+
+<Warning>
+  All matcher methods must use the regular `function` keyword—not arrow functions. Arrow functions do not bind their own `this`, which means `this.actual`, `this.assert`, `this.getSafeActual`, and `this.expect` will all be `undefined` at runtime inside the matcher body.
+</Warning>
 
 The following example assembles several matchers for After Effects layer types into a single exported `Matcher<any>` object that can be passed to `extendMatchers`. It is adapted from the extensibility documentation for the suite.
 

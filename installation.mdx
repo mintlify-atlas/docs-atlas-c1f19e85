@@ -1,7 +1,7 @@
 ---
-title: "Installing KT Testing Suite Core in Your Project"
+title: "Install KT Testing Suite Core in Your Adobe Project"
 sidebarTitle: "Installation"
-description: "Add kt-testing-suite-core to an Adobe extension project. Requirements, package manager commands, and kt.config.json build setup."
+description: "Add kt-testing-suite-core to an Adobe ExtendScript project. Covers prerequisites, package manager commands, and kt.config.json build configuration."
 ---
 
 KT Testing Suite Core is published to npm and is designed to live alongside your ExtendScript source code. Because the package ships its TypeScript source directly rather than a pre-compiled bundle, the `kt-extendscript-builder` CLI handles compilation at build time — pulling in the library source together with your own test files and emitting a single self-contained ExtendScript output file.
@@ -80,7 +80,7 @@ Everything exposed by `kt-testing-suite-core` is re-exported from a single entry
 
 ## Configure `kt.config.json`
 
-`kt-extendscript-builder` reads a `kt.config.json` file in your project root. You need at least two named build targets — one for production (minified) and one for development (readable, with source symbols intact). The configuration below is taken directly from the library's own `kt.config.json`:
+`kt-extendscript-builder` reads a `kt.config.json` file in your project root. You need at least two named build targets — one for production (minified) and one for development (readable, with source symbols intact). The test-related portion of the library's own `kt.config.json` looks like this:
 
 ```json
 {

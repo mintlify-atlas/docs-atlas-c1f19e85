@@ -1,7 +1,7 @@
 ---
-title: "Reporter Classes and TestReporter Interface API"
+title: "ConsoleReporter, JSONReporter, and TestReporter API"
 sidebarTitle: "Reporters API"
-description: "API reference for TestReporter interface, ConsoleReporter, JSONReporter, TestResult, and SuiteResult. Implement TestReporter to build custom output handlers."
+description: "API reference for TestReporter interface, ConsoleReporter, JSONReporter, TestResult, and SuiteResult. Implement TestReporter to build custom reporters."
 ---
 
 Reporters are the output layer of KT Testing Suite Core. The runner knows nothing about how results should be presented—it simply calls well-defined lifecycle methods on whatever object you pass as the reporter. The library ships two built-in implementations: `ConsoleReporter`, which prints human-readable lines via `$.writeln`, and `JSONReporter`, which additionally builds a structured result tree and emits JSON either to a file or as delimited output on `$.writeln`. You can also implement the `TestReporter` interface yourself to produce any output format you need.
@@ -168,7 +168,7 @@ class JSONReporter implements TestReporter {
 }
 ```
 
-Extends the behaviour of `ConsoleReporter` by additionally building a structured `SuiteResult` tree during the run and emitting a JSON document when `onFinished` is called.
+Composes a `ConsoleReporter` internally and delegates all console-output calls to it, while additionally building a structured `SuiteResult` tree during the run and emitting a JSON document when `onFinished` is called.
 
 ### constructor()
 

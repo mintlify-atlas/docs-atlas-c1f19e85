@@ -1,6 +1,6 @@
 ---
-title: "expect(), Expect Class, and Matcher Interface API"
-sidebarTitle: "expect"
+title: "expect(), Expect<T> Class, and Matcher Interface API"
+sidebarTitle: "Expect"
 description: "API reference for the expect() function, Expect<T> base class, Matcher<T> interface, createExpect(), extendMatchers(), and throwError()."
 ---
 
@@ -237,10 +237,13 @@ ce.toBe('#ff0000'); // jsMatchers still available
 ## extendMatchers()
 
 ```typescript
-const extendMatchers: typeof createExpect;
+function extendMatchers<T>(
+    actual: T,
+    matchers?: Matcher<T>[]
+): Expect<T> & Matcher<T>
 ```
 
-A re-exported alias for `createExpect`. The two names are interchangeable; `extendMatchers` is provided as a more descriptive name when the intent is to add custom matchers to an assertion.
+An exported alias for `createExpect` — both names refer to the same function. `extendMatchers` is provided as a more descriptive name when the intent is to add custom matchers to an assertion rather than use the standard `expect()` path.
 
 ```typescript
 import { extendMatchers } from 'kt-testing-suite-core';

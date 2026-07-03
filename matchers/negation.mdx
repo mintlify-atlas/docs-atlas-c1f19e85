@@ -1,5 +1,5 @@
 ---
-title: "Negating Matchers with not()"
+title: "Negation with not(): Inverting Matcher Assertions"
 sidebarTitle: "Negation"
 description: "Invert any matcher by calling not() before the assertion. Learn the correct not() invocation syntax and how it interacts with combined matchers."
 ---
@@ -94,24 +94,34 @@ expect(() => expect(undefined).not().toThrow()).toThrow();
 
 ## Chaining after `not()`
 
-Because `not()` returns the same `Expect<T>` instance, you can continue the chain normally after the negated matcher:
+Because `not()` returns the same `Expect<T>` instance, you can continue chaining after a negated assertion. However, it is important to understand that the `inverted` flag is **not** automatically reset after each matcher call. Calling `not()` toggles the flag; the next matcher — and every subsequent matcher in the chain — runs with that flag state until `not()` is called again.
+
+<Warning>
+  The `inverted` flag persists across the entire chain until toggled again. After `not()`, every subsequent matcher in the same chain is also inverted. To return to normal (non-inverted) assertions, call `not()` a second time to toggle the flag back.
+</Warning>
 
 ```typescript
-// Each matcher in the chain sees the flag state at the point it is called.
-// not() only inverts the NEXT assertion because toBeString() resets the
-// internal flow — subsequent matchers start from the same base instance.
-expect(42)
-    .not().toBeString()
-    .toBeNumber();
+// ✅ Single negated assertion — safe and common pattern
+expect(42).not().toBeString();
+
+// ✅ Chaining assertions when all should be inverted — flag stays true for every matcher
+expect(42).not().toBeString().toBeNull(); // 42 is not a string ✅, 42 is not null ✅
+
+// ⚠️ Calling not() a second time toggles the flag back to false,
+// so .toBeNumber() runs as a normal (non-inverted) assertion — this passes,
+// but the intent is easy to misread. Avoid this pattern.
+expect(42).not().toBeString().not().toBeNumber(); // flag: true → true → false → passes
+
+// ✅ Clearest pattern for mixing negated and positive assertions: separate expect() calls
+expect(42).not().toBeString(); // negated
+expect(42).toBeNumber();       // positive — fresh expect(), inverted starts as false
 ```
 
-<Note>
-  The `inverted` flag is not automatically reset after each assertion. If you need to chain a positive assertion after a negated one, be aware of the flag state. In practice, most chains use `not()` for a single negated assertion and do not mix positive and negative matchers in the same chain.
-</Note>
+In practice, the simplest and safest approach is to use separate `expect(...)` calls for positive and negative assertions rather than mixing them in a single chain.
 
 ## Using `not()` with `toPassAny` via the `'Not'` suffix
 
-When building `toPassAny` condition lists, you can negate individual conditions without calling `not()` directly — append `Not` to the matcher name string instead. This invokes `not()` on a temporary `Expect` instance scoped to that condition only, leaving the outer assertion unaffected:
+When building `toPassAny` condition lists, you can negate individual conditions without calling `not()` directly — append `Not` to the matcher name string instead. The `toPassAny` implementation detects the suffix, calls `not()` to toggle the flag before running that matcher, and returns immediately on the first passing condition:
 
 ```typescript
 // ✅ Passes — 5 is NOT a string (toBeStringNot passes)

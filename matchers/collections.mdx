@@ -1,5 +1,5 @@
 ---
-title: "Collection and String Matchers: toBeEmpty, toHaveLength, toContain"
+title: "Collection Matchers: toBeEmpty, toContain, toPassAny"
 sidebarTitle: "Collections"
 description: "Assert on arrays and strings with toBeEmpty, toHaveLength, toContain, toInclude, toHaveProperty, and toPassAny for flexible multi-condition assertions."
 ---
@@ -156,7 +156,8 @@ The `conditions` array accepts three forms per element:
 |---|---|---|
 | String (no args) | `'toBeString'` | Calls the named matcher with no argument. |
 | Object (with arg) | `{ toBeGreaterThan: 3 }` | Calls the named matcher with the given value. |
-| `'Not'` suffix | `'toBeStringNot'` | Calls `not()` then the named matcher (strips the `Not` suffix). |
+| `'Not'` suffix on string | `'toBeStringNot'` | Calls `not()` then the named matcher (strips `Not` from the end). |
+| `'Not'` suffix on object key | `{ toBeLessThanNot: 3 }` | Same negation, but passes the value as the matcher argument. |
 
 ```typescript
 // ✅ Passes — value is a number (first condition)

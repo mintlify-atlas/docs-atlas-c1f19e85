@@ -1,7 +1,7 @@
 ---
-title: "Type and Existence Matchers: toBeDefined, toBeNull, toBeString"
+title: "Type, Existence, Truthiness, and Error Assertion Matchers"
 sidebarTitle: "Type Checks"
-description: "Check value existence, nullability, and JavaScript types. Covers toBeDefined, toBeUndefined, toBeNull, toBeString, toBeNumber, toBeBoolean, toBeFunction, toBeArray."
+description: "Assert value existence, JavaScript types, truthiness, and error throwing. Covers toBeDefined, toBeNull, toBeString, toBeTruthy, toBeTrue, and toThrow."
 ---
 
 Type and existence matchers let you assert what kind of value you are dealing with before making deeper assertions. They are especially important in ExtendScript environments where Adobe host APIs can return `null`, `undefined`, or custom object types in ways that differ from standard JavaScript. All of the matchers documented here return `this`, so they are fully chainable.
@@ -196,6 +196,97 @@ expect(() => expect('abc').toBeArray()).toThrow();
 toBeArray(): this
 ```
 
+## Truthiness matchers
+
+Truthiness matchers check whether a value is truthy or falsy according to JavaScript's standard coercion rules, or whether a value is strictly the boolean literal `true` or `false`.
+
+### `toBeTrue()`
+
+Asserts that the actual value is **strictly** `true` — not merely truthy. The check uses `===`, so `1`, `"yes"`, and non-empty arrays all fail.
+
+```typescript
+// ✅ Passes
+expect(true).toBeTrue();
+expect(1 === 1).toBeTrue();
+
+// ❌ Throws — 1 is truthy but not strictly true
+expect(() => expect(1).toBeTrue()).toThrow();
+expect(() => expect('yes').toBeTrue()).toThrow();
+```
+
+**Signature:**
+
+```typescript
+toBeTrue(): this
+```
+
+### `toBeFalse()`
+
+Asserts that the actual value is **strictly** `false` — not merely falsy. The check uses `===`, so `0`, `""`, `null`, and `undefined` all fail.
+
+```typescript
+// ✅ Passes
+expect(false).toBeFalse();
+expect(1 !== 1).toBeFalse();
+
+// ❌ Throws — 0 is falsy but not strictly false
+expect(() => expect(0).toBeFalse()).toThrow();
+expect(() => expect(null).toBeFalse()).toThrow();
+```
+
+**Signature:**
+
+```typescript
+toBeFalse(): this
+```
+
+### `toBeTruthy()`
+
+Asserts that the actual value is **truthy** — any value for which `!!value === true`. This includes non-zero numbers, non-empty strings, objects, arrays (even empty ones), and `true` itself.
+
+```typescript
+// ✅ Passes
+expect(true).toBeTruthy();
+expect(1).toBeTruthy();
+expect('test').toBeTruthy();
+expect({}).toBeTruthy();
+expect([1]).toBeTruthy();
+expect([0]).toBeTruthy(); // Array is truthy despite containing a falsy value
+
+// ❌ Throws — falsy values
+expect(() => expect(0).toBeTruthy()).toThrow();
+expect(() => expect('').toBeTruthy()).toThrow();
+```
+
+**Signature:**
+
+```typescript
+toBeTruthy(): this
+```
+
+### `toBeFalsy()`
+
+Asserts that the actual value is **falsy** — any value for which `!value === true`. The falsy values in JavaScript are `false`, `0`, `""`, `null`, `undefined`, and `NaN`.
+
+```typescript
+// ✅ Passes
+expect(false).toBeFalsy();
+expect(0).toBeFalsy();
+expect('').toBeFalsy();
+expect(null).toBeFalsy();
+expect(undefined).toBeFalsy();
+
+// ❌ Throws — truthy values
+expect(() => expect('non-empty').toBeFalsy()).toThrow();
+expect(() => expect(1).toBeFalsy()).toThrow();
+```
+
+**Signature:**
+
+```typescript
+toBeFalsy(): this
+```
+
 ## `toBeInstanceOf(constructor)`
 
 Asserts that the actual value is an instance of the given constructor. The check first compares `value.constructor === expected`, then falls back to `value instanceof expected`. This two-step approach ensures correct behaviour with both standard JavaScript classes and Adobe host application classes (such as `CompItem`, `Layer`, `File`, etc.) where `instanceof` may not behave as expected across execution contexts.
@@ -240,6 +331,44 @@ toBeInstanceOf(expected: Function): this
 | Parameter | Type | Description |
 |---|---|---|
 | `expected` | `Function` | The constructor function to check against. |
+
+## `toThrow()`
+
+Asserts that the actual value is a **function** and that it **throws** an error when called. The matcher calls the function with no arguments and catches any exception. If the function does not throw, or if the actual value is not a function at all, the assertion fails.
+
+```typescript
+// ✅ Passes — function throws
+expect(() => {
+    throw new Error('Test error');
+}).toThrow();
+
+// ✅ Passes — function with a failing inner assertion also throws
+expect(() => {
+    expect(5).toBeString();
+}).toThrow();
+
+// ❌ Throws — function does not throw
+expect(() => expect(() => 42).toThrow()).toThrow();
+```
+
+<Warning>
+  `toThrow` only works on **functions**. Passing a non-function value (such as `42`, `null`, or `undefined`) always fails the assertion — the matcher cannot execute a non-function, so it cannot determine whether it would throw.
+</Warning>
+
+```typescript
+// ❌ All fail — non-function values cannot be tested with toThrow
+expect(() => expect(42).toThrow()).toThrow();
+expect(() => expect(null).toThrow()).toThrow();
+expect(() => expect(undefined).toThrow()).toThrow();
+```
+
+Use `not().toThrow()` to assert that a function completes **without** throwing. See the [Negation](/matchers/negation) page for detailed examples.
+
+**Signature:**
+
+```typescript
+toThrow(): this
+```
 
 ## Full examples from the test suite
 
@@ -303,6 +432,34 @@ it('toBeArray passes with arrays', () => {
 });
 ```
 
+```typescript Truthiness
+it('toBeTruthy passes with truthy values', () => {
+    expect(true).toBeTruthy();
+    expect(1).toBeTruthy();
+    expect('test').toBeTruthy();
+    expect({}).toBeTruthy();
+    expect([1]).toBeTruthy();
+});
+
+it('toBeFalsy passes with falsy values', () => {
+    expect(false).toBeFalsy();
+    expect(0).toBeFalsy();
+    expect('').toBeFalsy();
+    expect(null).toBeFalsy();
+    expect(undefined).toBeFalsy();
+});
+
+it('toBeTrue passes with strict true', () => {
+    expect(true).toBeTrue();
+    expect(1 === 1).toBeTrue();
+});
+
+it('toBeFalse passes with strict false', () => {
+    expect(false).toBeFalse();
+    expect(1 !== 1).toBeFalse();
+});
+```
+
 ```typescript Sad path
 it('toBeDefined fails with undefined', () => {
     expect(() => expect(undefined).toBeDefined()).toThrow();
@@ -319,6 +476,11 @@ it('toBeNumber fails with non-numbers', () => {
 
 it('toBeString fails with non-strings', () => {
     expect(() => expect(123).toBeString()).toThrow();
+});
+
+it('toThrow fails with non-function values', () => {
+    expect(() => expect(42).toThrow()).toThrow();
+    expect(() => expect(null).toThrow()).toThrow();
 });
 ```
 

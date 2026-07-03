@@ -1,7 +1,7 @@
 ---
-title: "Test Reporters: ConsoleReporter and JSONReporter"
+title: "KT Testing Suite Built-in Reporters: Console and JSON"
 sidebarTitle: "Overview"
-description: "KT Testing Suite ships ConsoleReporter for human-readable output and JSONReporter for structured JSON output. Use reporters with runTests() or TestRunner."
+description: "KT Testing Suite ships ConsoleReporter and JSONReporter. Learn their lifecycle hooks, output formats, and how to pass them to runTests() or TestRunner."
 ---
 
 Reporters are the bridge between your test run and the outside world. Every time the test runner starts a suite, executes a test, or finishes a run, it emits lifecycle events to the active reporter. KT Testing Suite ships two built-in reporters: `ConsoleReporter` for human-readable output written directly to the ExtendScript console, and `JSONReporter` for structured, machine-parseable results — optionally written to a file. Both are driven by the same `TestReporter` interface, so they can be swapped or composed without changing your test code.

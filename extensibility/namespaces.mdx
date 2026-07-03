@@ -1,5 +1,5 @@
 ---
-title: "Organizing Matchers with TypeScript Namespaces"
+title: "Namespacing Custom Matchers in TypeScript for ExtendScript"
 sidebarTitle: "Namespaces"
 description: "Scope custom matchers in TypeScript namespaces to avoid conflicts and group related assertions. Supports nested namespaces for hierarchical organization."
 ---
@@ -19,6 +19,10 @@ Common reasons to reach for a namespace:
 ## The Namespace Pattern
 
 The idiomatic pattern is a TypeScript `namespace` block that exports a single `expect` function. That function wraps `extendMatchers` and carries whatever `Matcher<any>` objects belong to this namespace.
+
+<Warning>
+  Always define matcher methods using the regular `function` keyword—never arrow functions. Arrow functions do not bind their own `this`, so `this.actual`, `this.assert`, `this.getSafeActual`, and `this.expect` will all be `undefined` at runtime.
+</Warning>
 
 ```typescript
 import { extendMatchers, type Matcher, Expect } from 'kt-testing-suite-core';

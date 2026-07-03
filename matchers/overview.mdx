@@ -1,5 +1,5 @@
 ---
-title: "Built-in Matchers: Complete Reference Overview"
+title: "Built-in Matchers Overview: All Categories Reference"
 sidebarTitle: "Overview"
 description: "All 30+ built-in matchers grouped by category. Equality, type checks, truthiness, size/content, numeric, instance, IO, negation, and combined matchers."
 ---
@@ -19,7 +19,7 @@ Every matcher returns `this`, the same `Expect<T>` instance, so you can chain mu
     `toBe` for strict identity and `toEqual` for deep JSON equality.
   </Card>
   <Card title="Type Checks" icon="magnifying-glass" href="/matchers/type-checks">
-    `toBeDefined`, `toBeNull`, `toBeString`, `toBeNumber`, `toBeArray`, and more.
+    `toBeDefined`, `toBeNull`, `toBeString`, `toBeNumber`, `toBeArray`, `toBeTruthy`, `toThrow`, and more.
   </Card>
   <Card title="Numeric" icon="calculator" href="/matchers/numeric">
     `toBeGreaterThan`, `toBeLessThan`, `toBeCloseTo`, and their variants.
@@ -41,20 +41,20 @@ Every matcher returns `this`, the same `Expect<T>` instance, so you can chain mu
 |---|---|---|
 | `toBe(expected)` | Equality | Strict identity check (`===`) |
 | `toEqual(expected)` | Equality | Deep equality via `JSON.stringify` |
-| `toBeDefined()` | Type | Value is not `undefined` |
-| `toBeUndefined()` | Type | Value is strictly `undefined` |
-| `toBeNull()` | Type | Value is strictly `null` |
-| `toBeNumber()` | Type | Value is a `number` and not `NaN` |
-| `toBeNaN()` | Type | Value is `NaN` |
-| `toBeString()` | Type | Value is a `string` |
-| `toBeBoolean()` | Type | Value is a `boolean` |
-| `toBeFunction()` | Type | Value is a `function` |
-| `toBeArray()` | Type | Value is an `Array` |
-| `toBeInstanceOf(ctor)` | Type | Value is an instance of the given constructor |
-| `toBeTrue()` | Truthiness | Value is strictly `true` |
-| `toBeFalse()` | Truthiness | Value is strictly `false` |
-| `toBeTruthy()` | Truthiness | Value is truthy (`!!value === true`) |
-| `toBeFalsy()` | Truthiness | Value is falsy (`!value === true`) |
+| `toBeDefined()` | Type Checks | Value is not `undefined` |
+| `toBeUndefined()` | Type Checks | Value is strictly `undefined` |
+| `toBeNull()` | Type Checks | Value is strictly `null` |
+| `toBeNumber()` | Type Checks | Value is a `number` and not `NaN` |
+| `toBeNaN()` | Type Checks | Value is `NaN` |
+| `toBeString()` | Type Checks | Value is a `string` |
+| `toBeBoolean()` | Type Checks | Value is a `boolean` |
+| `toBeFunction()` | Type Checks | Value is a `function` |
+| `toBeArray()` | Type Checks | Value is an `Array` |
+| `toBeInstanceOf(ctor)` | Type Checks | Value is an instance of the given constructor |
+| `toBeTrue()` | Type Checks | Value is strictly `true` |
+| `toBeFalse()` | Type Checks | Value is strictly `false` |
+| `toBeTruthy()` | Type Checks | Value is truthy (`!!value === true`) |
+| `toBeFalsy()` | Type Checks | Value is falsy (`!value === true`) |
 | `toBeEmpty()` | Collections | Array or string (or null/undefined) has length 0 |
 | `toHaveLength(n)` | Collections | Array or string has exactly `n` elements/characters |
 | `toContain(str)` | Collections | String contains the given substring |
@@ -66,12 +66,12 @@ Every matcher returns `this`, the same `Expect<T>` instance, so you can chain mu
 | `toBeGreaterThanOrEqual(n)` | Numeric | Number is greater than or equal to `n` |
 | `toBeLessThanOrEqual(n)` | Numeric | Number is less than or equal to `n` |
 | `toBeCloseTo(n, precision?)` | Numeric | Floating-point value within `10^-precision` of `n` |
-| `toThrow()` | Error | Function throws when called |
+| `toThrow()` | Type Checks | Function throws when called |
 | `toBeFile()` | IO | Value is an ExtendScript `File` instance |
 | `toBeFolder()` | IO | Value is an ExtendScript `Folder` instance |
 | `toBeFileOrFolder()` | IO | Value is either a `File` or a `Folder` instance |
 | `fileExists()` | IO | Value is a `File` and its `.exists` property is `true` |
-| `not()` | Negation | Inverts the next matcher assertion |
+| `not()` | Negation | Toggles the inverted flag; inverts subsequent matcher assertions |
 
 ## Chainability
 
@@ -96,4 +96,4 @@ expect([1, 2, 3]).not().toBeEmpty();
 expect(() => { throw new Error(); }).not().not().toThrow(); // double-negation: passes
 ```
 
-`not()` returns the same `Expect<T>` instance with its internal `inverted` flag toggled, so the chain continues normally. See the [Negation](/matchers/negation) page for the full reference.
+`not()` returns the same `Expect<T>` instance with its internal `inverted` flag toggled. The flag persists for all subsequent matchers in the chain — call `not()` again to toggle it back. See the [Negation](/matchers/negation) page for the full reference.
