@@ -1,0 +1,225 @@
+---
+title: "TestRunner Class and runTests() API Reference"
+sidebarTitle: "Runner"
+description: "API reference for the TestRunner class and runTests() function. Executes suites, invokes reporters, and supports test name filtering."
+---
+
+The runner is the component that takes the registered suites and actually executes them. KT Testing Suite Core ships two entry points: `runTests()`, a convenience function suitable for the common case, and `TestRunner`, a class you can instantiate directly when you need finer-grained control over the reporter or filter. Both drive the same execution engine that calls lifecycle hooks, catches test errors, and dispatches events to the reporter at each stage of the run.
+
+---
+
+## runTests()
+
+```typescript
+function runTests(
+    suites?: Suite[],
+    reporter?: TestReporter,
+    filter?: string
+): void
+```
+
+Convenience wrapper that constructs a `TestRunner` instance and immediately calls `run()` on it. For most scripts this is the only runner API you need.
+
+<ParamField path="suites" type="Suite[]">
+  The array of root suites to execute. Defaults to the return value of `getSuites()`, which contains every suite registered through `describe()` up to this point in the script. Pass an explicit array when you want to run a subset of suites.
+</ParamField>
+
+<ParamField path="reporter" type="TestReporter">
+  The reporter instance that receives lifecycle events. Defaults to a new `ConsoleReporter`. Pass a `JSONReporter` or your own custom reporter to change the output format.
+</ParamField>
+
+<ParamField path="filter" type="string">
+  An optional case-insensitive substring. When provided, only tests whose **full name** (all ancestor suite descriptions concatenated with the test name, separated by spaces) contains this substring are executed. Tests that do not match are silently skipped—they are not counted in the totals and do not appear in the reporter output.
+</ParamField>
+
+### Examples
+
+<CodeGroup>
+```typescript Default — run everything
+import { runTests } from 'kt-testing-suite-core';
+
+// Uses getSuites(), ConsoleReporter, no filter
+runTests();
+```
+
+```typescript With a custom reporter
+import { runTests, JSONReporter } from 'kt-testing-suite-core';
+
+runTests(undefined, new JSONReporter('/tmp/results.json'));
+```
+
+```typescript With a filter
+import { runTests } from 'kt-testing-suite-core';
+
+// Run only tests whose full name contains "auth"
+runTests(undefined, undefined, 'auth');
+```
+
+```typescript Explicit suites
+import { describe, it, getSuites, runTests, expect } from 'kt-testing-suite-core';
+
+describe('Suite A', () => {
+    it('test 1', () => { expect(1).toBe(1); });
+});
+
+describe('Suite B', () => {
+    it('test 2', () => { expect(2).toBe(2); });
+});
+
+// Run only Suite A
+runTests([getSuites()[0]]);
+```
+</CodeGroup>
+
+---
+
+## TestRunner class
+
+```typescript
+class TestRunner {
+    constructor(reporter?: TestReporter, filter?: string)
+    run(suites: Suite[]): void
+}
+```
+
+The `TestRunner` class encapsulates the full execution lifecycle. Instantiate it directly when you need to reuse the same reporter across multiple `run()` calls, keep a reference for later inspection, or integrate the runner into a larger automation script.
+
+### constructor()
+
+<ParamField path="reporter" type="TestReporter">
+  The reporter that receives lifecycle events during the run. Defaults to a new `ConsoleReporter` instance if omitted.
+</ParamField>
+
+<ParamField path="filter" type="string">
+  Case-insensitive substring filter applied to the full test name (`"<suite> ... <test>"`). Tests whose full name does not contain this string are skipped. Omit or pass `undefined` to run all tests.
+</ParamField>
+
+### run()
+
+```typescript
+run(suites: Suite[]): void
+```
+
+Executes the provided array of root suites in order. Triggers the full reporter lifecycle: `onStart` before any suite, one `onSuiteStart` / `onSuiteEnd` pair per suite (including nested suites), one `onTestStart` / `onTestEnd` pair per test, and `onFinished` with aggregate statistics at the very end.
+
+<ParamField path="suites" type="Suite[]" required>
+  The root suites to run. Child suites are traversed recursively—there is no need to flatten the tree before calling `run()`.
+</ParamField>
+
+### Internal counters
+
+Two private counters are maintained across the run and included in the `onFinished` payload:
+
+<ResponseField name="passedTests" type="number">
+  Incremented each time a test function returns without throwing.
+</ResponseField>
+<ResponseField name="failedTests" type="number">
+  Incremented each time a test function throws any error.
+</ResponseField>
+
+---
+
+## Execution Flow
+
+The diagram below describes the sequence of operations the runner performs for each suite. Nested suites follow the same flow recursively within the parent's test loop.
+
+```
+onStart()
+│
+└─ for each root suite:
+   │
+   ├─ onSuiteStart(suite)
+   ├─ runSuiteHooks(suite, 'beforeAll')   ← suite-scoped, no inheritance
+   │
+   ├─ for each test in suite.tests:
+   │   │
+   │   ├─ [shouldSkip check]             ← skipped silently if filter set
+   │   ├─ onTestStart(test)
+   │   ├─ runHooks(suite, 'beforeEach', parent→child)
+   │   ├─ test.fn()                       ← assertion errors caught here
+   │   ├─ runHooks(suite, 'afterEach', child→parent)  ← runs in finally
+   │   └─ onTestEnd(test, result)
+   │
+   ├─ for each child suite:
+   │   └─ [recurse with updated parentDescription]
+   │
+   ├─ runSuiteHooks(suite, 'afterAll')    ← runs in finally
+   └─ onSuiteEnd(suite)
+│
+onFinished({ passed, failed, total })
+```
+
+---
+
+## Test Filtering
+
+The private `shouldSkip()` method implements filtering:
+
+```typescript
+private shouldSkip(fullName: string): boolean {
+    if (!this.filter) return false;
+    return fullName.toLowerCase().indexOf(this.filter.toLowerCase()) === -1;
+}
+```
+
+The `fullName` is the concatenation of all ancestor suite descriptions plus the test name, separated by spaces. The match is a case-insensitive substring search—no glob or regex syntax is supported.
+
+<Tip>
+  Because filtering is applied at the individual test level, `onSuiteStart` and `onSuiteEnd` are still called for suites that contain no matching tests. All tests within those suites are silently skipped. This mirrors Jest's `--testNamePattern` behaviour.
+</Tip>
+
+---
+
+## Error Handling
+
+The runner distinguishes between test errors and hook errors:
+
+| Source | Behaviour |
+|---|---|
+| `test.fn()` throws | Caught; `failedTests` incremented; `onTestEnd` called with `status: 'failed'` and the error object |
+| `beforeEach` / `afterEach` throws | Caught in `runHooks`; logged to `$.writeln` as `⚠️ Error in beforeEach: …`; run continues |
+| `beforeAll` / `afterAll` throws | Caught in `runSuiteHooks`; logged to `$.writeln` as `⚠️ Error in beforeAll: …`; run continues |
+
+The `afterEach` hooks always run in a `finally` block, so they execute even when the test or `beforeEach` threw.
+
+---
+
+## Full Example
+
+```typescript
+import {
+    describe,
+    it,
+    beforeAll,
+    afterEach,
+    expect,
+    getSuites,
+    TestRunner,
+    JSONReporter
+} from 'kt-testing-suite-core';
+
+describe('Document export', () => {
+    let doc: Document;
+
+    beforeAll(() => {
+        doc = app.documents.add();
+    });
+
+    afterEach(() => {
+        // Clean up any exported files
+    });
+
+    it('exports as PNG', () => {
+        expect(doc).toBeDefined();
+    });
+
+    it('has the correct name', () => {
+        expect(doc.name).toBeString();
+    });
+});
+
+// Run with JSON output and filter to only "exports" tests
+const reporter = new JSONReporter('/tmp/export-results.json');
+const runner = new TestRunner(reporter, 'exports');
+runner.run(getSuites());
+```

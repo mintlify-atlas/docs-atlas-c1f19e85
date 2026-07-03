@@ -1,20 +1,73 @@
 ---
-title: "Introduction"
-description: "Welcome to your project"
+title: "KT Testing Suite Core: ExtendScript Testing for Adobe"
+sidebarTitle: "Home"
+description: "Jest/Mocha-style testing framework for Adobe app extensions. Write TypeScript tests that run inside After Effects, Premiere Pro, Illustrator, and more."
 ---
 
-Write a short description of your product here. What it does, who it's for, and what they can accomplish with it.
+KT Testing Suite Core brings familiar testing patterns to the world of Adobe ExtendScript. Write `describe`/`it`/`expect` tests in TypeScript, build them with the KT toolchain, and run them directly inside any Adobe host application via the ExtendScript Debugger.
 
-<Tip>
-  Ready to make this your own? Start by editing this page. Update your `docs.json` file to customize your site. Then fill out the [Quickstart](/quickstart) page.
-</Tip>
+<CardGroup cols={2}>
+  <Card title="Introduction" icon="book-open" href="/introduction">
+    Learn what KT Testing Suite Core is, how it fits into the Adobe ExtendScript ecosystem, and when to use it.
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Install the package, write your first test, and run it inside an Adobe app in under five minutes.
+  </Card>
+  <Card title="Matchers" icon="check-circle" href="/matchers/overview">
+    Browse 30+ built-in matchers for equality, type checks, numeric comparisons, collections, and Adobe IO types.
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/describe-it">
+    Full TypeScript signatures for every exported function, class, and interface.
+  </Card>
+</CardGroup>
 
-<Card title="Quickstart" icon="rocket" href="/quickstart">
-  This card links to the quickstart page in your project.
-</Card>
-<Card title="Components" icon="puzzle-piece" href="https://mintlify.com/docs/components">
-  Add cards, callouts, steps, tabs, and more to design and structure your pages.
-</Card>
-<Card title="Settings" icon="gear" href="https://mintlify.com/docs/organize/settings">
-  Set your site name, branding, and navigation in the `docs.json` file.
-</Card>
+## What's inside
+
+<CardGroup cols={2}>
+  <Card title="Lifecycle Hooks" icon="rotate" href="/writing-tests/hooks">
+    `beforeEach`, `afterEach`, `beforeAll`, and `afterAll` with correct nested suite execution order.
+  </Card>
+  <Card title="Custom Matchers" icon="puzzle-piece" href="/extensibility/custom-matchers">
+    Extend `expect` with your own domain-specific matchers using `extendMatchers()`.
+  </Card>
+  <Card title="Reporters" icon="chart-bar" href="/reporters/overview">
+    Built-in `ConsoleReporter` and `JSONReporter` for human-readable output and VS Code extension integration.
+  </Card>
+  <Card title="Adobe Type Helpers" icon="adobe" href="/extensibility/adobe-type-helpers">
+    `asAdobeType<T>()` and `isAdobeType()` for type-safe assertions on After Effects, Premiere, and Illustrator objects.
+  </Card>
+</CardGroup>
+
+## Get started in three steps
+
+<Steps>
+  <Step title="Install">
+    Add the package to your Adobe extension project.
+    ```bash
+    npm install kt-testing-suite-core
+    ```
+  </Step>
+  <Step title="Write a test">
+    Create a test file using the familiar `describe`/`it`/`expect` API.
+    ```typescript src/tests/my-suite.test.ts
+    import { describe, it, expect } from "kt-testing-suite-core";
+
+    describe("My Suite", () => {
+      it("adds numbers correctly", () => {
+        expect(1 + 1).toBe(2);
+      });
+    });
+    ```
+  </Step>
+  <Step title="Build and run">
+    Build the test bundle and run it in Adobe via the ExtendScript Debugger.
+    ```bash
+    npm run build-tests
+    ```
+    Then open the [ExtendScript Debugger](https://marketplace.visualstudio.com/items?itemName=Adobe.extendscript-debug) in VS Code and point it at `dist.test/index.test.js`.
+  </Step>
+</Steps>
+
+<Note>
+  KT Testing Suite Core targets the ExtendScript engine used inside Adobe Creative Cloud apps. It does not run in a standard Node.js environment — tests must be executed inside an Adobe host application.
+</Note>

@@ -1,0 +1,99 @@
+---
+title: "Built-in Matchers: Complete Reference Overview"
+sidebarTitle: "Overview"
+description: "All 30+ built-in matchers grouped by category. Equality, type checks, truthiness, size/content, numeric, instance, IO, negation, and combined matchers."
+---
+
+Matchers are the assertion engine at the heart of KT Testing Suite Core. Every test assertion begins with `expect(value)`, which returns a typed `Expect<T>` instance. From there you call a matcher method — such as `.toBe()`, `.toBeString()`, or `.toHaveLength()` — which evaluates the actual value against a condition and either passes silently or throws an error that the test runner records as a failure.
+
+Every matcher returns `this`, the same `Expect<T>` instance, so you can chain multiple assertions on a single value without repeating `expect(...)`. You can also prepend `.not()` — called **as a function** — to invert the assertion. The sections below group all built-in matchers by category and link to dedicated reference pages for each group.
+
+<Note>
+  `not()` must be called as a function with parentheses: `expect(x).not().toBe(y)`. Writing `expect(x).not.toBe(y)` (without parentheses) will not invert the assertion.
+</Note>
+
+## Matcher categories
+
+<CardGroup cols={2}>
+  <Card title="Equality" icon="equals" href="/matchers/equality">
+    `toBe` for strict identity and `toEqual` for deep JSON equality.
+  </Card>
+  <Card title="Type Checks" icon="magnifying-glass" href="/matchers/type-checks">
+    `toBeDefined`, `toBeNull`, `toBeString`, `toBeNumber`, `toBeArray`, and more.
+  </Card>
+  <Card title="Numeric" icon="calculator" href="/matchers/numeric">
+    `toBeGreaterThan`, `toBeLessThan`, `toBeCloseTo`, and their variants.
+  </Card>
+  <Card title="Collections" icon="list" href="/matchers/collections">
+    `toBeEmpty`, `toHaveLength`, `toContain`, `toInclude`, `toHaveProperty`, `toPassAny`.
+  </Card>
+  <Card title="IO Matchers" icon="folder-open" href="/matchers/io">
+    `toBeFile`, `toBeFolder`, `toBeFileOrFolder`, and `fileExists` for ExtendScript IO types.
+  </Card>
+  <Card title="Negation" icon="ban" href="/matchers/negation">
+    The `not()` modifier and how it interacts with every matcher.
+  </Card>
+</CardGroup>
+
+## Quick-reference table
+
+| Matcher | Category | One-line description |
+|---|---|---|
+| `toBe(expected)` | Equality | Strict identity check (`===`) |
+| `toEqual(expected)` | Equality | Deep equality via `JSON.stringify` |
+| `toBeDefined()` | Type | Value is not `undefined` |
+| `toBeUndefined()` | Type | Value is strictly `undefined` |
+| `toBeNull()` | Type | Value is strictly `null` |
+| `toBeNumber()` | Type | Value is a `number` and not `NaN` |
+| `toBeNaN()` | Type | Value is `NaN` |
+| `toBeString()` | Type | Value is a `string` |
+| `toBeBoolean()` | Type | Value is a `boolean` |
+| `toBeFunction()` | Type | Value is a `function` |
+| `toBeArray()` | Type | Value is an `Array` |
+| `toBeInstanceOf(ctor)` | Type | Value is an instance of the given constructor |
+| `toBeTrue()` | Truthiness | Value is strictly `true` |
+| `toBeFalse()` | Truthiness | Value is strictly `false` |
+| `toBeTruthy()` | Truthiness | Value is truthy (`!!value === true`) |
+| `toBeFalsy()` | Truthiness | Value is falsy (`!value === true`) |
+| `toBeEmpty()` | Collections | Array or string (or null/undefined) has length 0 |
+| `toHaveLength(n)` | Collections | Array or string has exactly `n` elements/characters |
+| `toContain(str)` | Collections | String contains the given substring |
+| `toInclude(item)` | Collections | Array contains the given element (strict equality) |
+| `toHaveProperty(key, val?)` | Collections | Object has own property; optionally checks value |
+| `toPassAny(conditions)` | Collections | At least one condition in the array passes |
+| `toBeGreaterThan(n)` | Numeric | Number is strictly greater than `n` |
+| `toBeLessThan(n)` | Numeric | Number is strictly less than `n` |
+| `toBeGreaterThanOrEqual(n)` | Numeric | Number is greater than or equal to `n` |
+| `toBeLessThanOrEqual(n)` | Numeric | Number is less than or equal to `n` |
+| `toBeCloseTo(n, precision?)` | Numeric | Floating-point value within `10^-precision` of `n` |
+| `toThrow()` | Error | Function throws when called |
+| `toBeFile()` | IO | Value is an ExtendScript `File` instance |
+| `toBeFolder()` | IO | Value is an ExtendScript `Folder` instance |
+| `toBeFileOrFolder()` | IO | Value is either a `File` or a `Folder` instance |
+| `fileExists()` | IO | Value is a `File` and its `.exists` property is `true` |
+| `not()` | Negation | Inverts the next matcher assertion |
+
+## Chainability
+
+Because every matcher returns `this`, you can assert multiple conditions on a single `Expect<T>` instance in one expression:
+
+```typescript
+expect('hello world')
+  .toBeString()
+  .toHaveLength(11)
+  .toContain('world');
+```
+
+Each matcher in the chain is evaluated independently against the original value. A failure in any link throws immediately and the chain stops.
+
+## The `not()` modifier
+
+Prepend `not()` anywhere in a chain to invert the assertion that follows:
+
+```typescript
+expect(42).not().toBeString();
+expect([1, 2, 3]).not().toBeEmpty();
+expect(() => { throw new Error(); }).not().not().toThrow(); // double-negation: passes
+```
+
+`not()` returns the same `Expect<T>` instance with its internal `inverted` flag toggled, so the chain continues normally. See the [Negation](/matchers/negation) page for the full reference.

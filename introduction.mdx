@@ -1,0 +1,98 @@
+---
+title: "KT Testing Suite Core: Test Adobe ExtendScript with TypeScript"
+sidebarTitle: "Introduction"
+description: "KT Testing Suite Core is a Jest/Mocha-style testing framework for Adobe app extensions. Learn how it fits into the ExtendScript ecosystem."
+---
+
+KT Testing Suite Core brings familiar Jest/Mocha-style test ergonomics to the world of Adobe ExtendScript. If you've ever tried to validate logic running inside After Effects, Premiere Pro, or Illustrator — where JavaScript is executed by the Adobe host application rather than Node.js — you know how difficult it is to rely on modern testing tooling. KT Testing Suite Core solves that by providing a self-contained `describe`/`it`/`expect` API that compiles down to plain ExtendScript and runs entirely inside the Adobe host.
+
+## What Problem Does It Solve?
+
+Adobe CC extensions backed by ExtendScript run inside a sandboxed JavaScript engine (the ExtendScript runtime) that predates ES5 and has no access to Node.js, browser APIs, or npm-native test runners like Jest or Vitest. You cannot simply `npm test` your way to green. KT Testing Suite Core bridges that gap: you write tests in TypeScript using an API you already know, build them to a single ExtendScript file with [`kt-extendscript-builder`](https://github.com/Octopodo/kt-extendscript-builder), and execute them directly inside the target Adobe application using the [ExtendScript Debugger](https://marketplace.visualstudio.com/items?itemName=Adobe.extendscript-debug) VS Code extension.
+
+## The ExtendScript / Adobe Context
+
+ExtendScript is Adobe's proprietary scripting layer, based on JavaScript 1.5, that gives scripts direct access to the host application's DOM — compositions in After Effects, sequences in Premiere Pro, documents in Illustrator, and so on. Code runs inside the host process, meaning your tests can create real `CompItem` objects, add layers, query properties, and assert against live application state.
+
+Because the runtime is not Node.js, all test infrastructure must ship as part of the compiled bundle. KT Testing Suite Core is designed with exactly this constraint in mind: it has zero runtime dependencies beyond what ExtendScript provides, and it bundles a JSON polyfill (`json2.js`) for older host versions that lack native `JSON` support.
+
+## Integration with the KT Ecosystem
+
+KT Testing Suite Core is one piece of a larger toolchain for building Adobe extensions in TypeScript:
+
+- **[kt-extendscript-builder](https://github.com/Octopodo/kt-extendscript-builder)** — The `kt-build` CLI that compiles TypeScript sources (including test files) into a single `.jsx`/`.js` ExtendScript bundle. The `build-tests` and `build-tests-debug` scripts in your project's `kt.config.json` point directly at this tool.
+- **[Bolt CEP](https://github.com/hyperbrew/bolt-cep)** — A full-stack Adobe CEP extension scaffold. KT Testing Suite Core's build pipeline is based on Bolt CEP's bundling infrastructure, making it a natural fit for projects that use Bolt.
+- **[Types for Adobe](https://github.com/docsforadobe/Types-for-Adobe)** — TypeScript type definitions for Adobe application APIs (After Effects, Premiere Pro, Illustrator, etc.). These types let you write type-safe test code against Adobe-specific classes like `CompItem`, `AVLayer`, or `FootageSource`.
+- **[KT Testing Suite AE](https://github.com/Octopodo/kt-testing-suite-ae)** — An optional extension layer built on top of this core that provides After Effects-specific matchers.
+
+## Key Features
+
+### `describe` / `it` / `expect`
+
+The familiar nested suite and test structure you already know from Jest and Mocha. Tests are registered synchronously, then executed when you call `runTests()`.
+
+```typescript
+import { describe, it, expect, runTests } from "kt-testing-suite-core";
+
+describe("Layer Validation", () => {
+  it("should confirm a composition was created", () => {
+    const comp = app.project.items.addComp("Test Comp", 1920, 1080, 1, 10, 30);
+    expect(comp).toBeInstanceOf(CompItem);
+    comp.remove();
+  });
+});
+
+runTests();
+```
+
+### Rich Matcher Library
+
+Over 30 built-in matchers organized into logical groups — equality (`toBe`, `toEqual`), type checking (`toBeString`, `toBeNumber`, `toBeArray`), truthiness (`toBeTruthy`, `toBeFalsy`), size and content (`toHaveLength`, `toContain`, `toInclude`, `toHaveProperty`), numeric comparisons (`toBeGreaterThan`, `toBeCloseTo`), error handling (`toThrow`), and ExtendScript-specific I/O matchers (`toBeFile`, `toBeFolder`, `fileExists`). Every matcher supports negation via `.not()`.
+
+### Lifecycle Hooks
+
+`beforeEach`, `afterEach`, `beforeAll`, and `afterAll` hooks run at the right moments in the test lifecycle, supporting nested scopes just as they do in Jest.
+
+### Reporters
+
+Results are surfaced through a pluggable reporter interface. The default `ConsoleReporter` writes human-readable output to the ExtendScript console. The `JSONReporter` emits structured JSON wrapped in `JSON_OUTPUT_START` / `JSON_OUTPUT_END` markers, which is useful for IDE integrations and CI pipelines. You can implement the `TestReporter` interface to build your own.
+
+### Extensibility
+
+`extendMatchers` lets you register custom matcher objects and get them back as a fully-typed `expect` function. Adobe type helpers (`asAdobeType`, `isAdobeType`) eliminate repetitive `as unknown as T` casts when writing matchers that touch Adobe application objects.
+
+## Environment Note
+
+<Note>
+  KT Testing Suite Core executes inside an Adobe host application — not in
+  Node.js and not in a browser. Tests must be compiled to a single ExtendScript
+  bundle (via `kt-build`) and executed using the ExtendScript Debugger VS Code
+  extension or another ExtendScript runner that targets the correct host
+  application. You cannot run these tests with `jest`, `vitest`, or `mocha`
+  directly from the command line.
+</Note>
+
+## Explore the Documentation
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Install the package, write your first test, build it, and run it inside an
+    Adobe app in under five minutes.
+  </Card>
+  <Card title="Matchers Overview" icon="list-check" href="/matchers/overview">
+    Browse the full set of built-in matchers — equality, type, truthiness, size,
+    numeric, I/O, and more.
+  </Card>
+  <Card title="Hooks" icon="arrows-rotate" href="/writing-tests/hooks">
+    Use `beforeEach`, `afterEach`, `beforeAll`, and `afterAll` to manage setup
+    and teardown around your tests.
+  </Card>
+  <Card
+    title="Custom Matchers"
+    icon="puzzle-piece"
+    href="/extensibility/custom-matchers"
+  >
+    Extend `expect` with your own matchers using `extendMatchers`, and safely
+    access Adobe object types with the included type helpers.
+  </Card>
+</CardGroup>

@@ -1,0 +1,300 @@
+---
+title: "beforeEach, afterEach, beforeAll, afterAll API Reference"
+sidebarTitle: "Hooks"
+description: "API reference for the four lifecycle hook functions. Each must be called inside a describe() block and registers a callback on the current suite."
+---
+
+Lifecycle hooks let you run setup and teardown logic around your tests without repeating it inside every `it()` block. KT Testing Suite Core provides four hooks—`beforeEach`, `afterEach`, `beforeAll`, and `afterAll`—that mirror the familiar Jest/Mocha API. Each hook registers a single `TestFn` callback on the suite that is currently being defined. All four functions must be called synchronously inside a `describe()` block; calling them at the top level of a script throws immediately.
+
+---
+
+## Hook Registration Rules
+
+<Note>
+  Every hook is stored as a single function reference on the `Suite` object (`suite.beforeEach`, `suite.afterEach`, etc.). Registering the same hook type twice inside one `describe` block will overwrite the first registration. If you need multiple setup steps, combine them into one function.
+</Note>
+
+---
+
+## beforeEach()
+
+```typescript
+function beforeEach(fn: TestFn): void
+```
+
+Registers a callback to run **before every individual test** in the current suite. When the runner processes a test, it traverses the suite ancestry from the root down to the current suite, collecting each `beforeEach` along the way, and calls them in **parent-to-child order** before invoking the test body.
+
+<ParamField path="fn" type="TestFn" required>
+  A zero-argument synchronous function containing setup logic. Called before each test in this suite and in all descendant suites.
+</ParamField>
+
+<Warning>
+  `beforeEach()` must be called inside a `describe()` block. Calling it at the top level throws:
+  ```
+  Error: beforeEach() must be called inside a describe()
+  ```
+</Warning>
+
+### Example
+
+```typescript
+import { describe, it, beforeEach, expect } from 'kt-testing-suite-core';
+
+let counter: number;
+
+describe('Counter tests', () => {
+    beforeEach(() => {
+        counter = 0; // reset before each test
+    });
+
+    it('starts at zero', () => {
+        expect(counter).toBe(0);
+    });
+
+    it('can be incremented', () => {
+        counter++;
+        expect(counter).toBe(1);
+    });
+});
+```
+
+### Nested suite execution order
+
+When `beforeEach` hooks are defined on both a parent and a child suite, the **parent hook runs first**:
+
+```typescript
+describe('Outer', () => {
+    beforeEach(() => {
+        $.writeln('outer beforeEach'); // runs first
+    });
+
+    describe('Inner', () => {
+        beforeEach(() => {
+            $.writeln('inner beforeEach'); // runs second
+        });
+
+        it('test', () => { /* ... */ });
+    });
+});
+// Output order: "outer beforeEach" → "inner beforeEach" → test body
+```
+
+---
+
+## afterEach()
+
+```typescript
+function afterEach(fn: TestFn): void
+```
+
+Registers a callback to run **after every individual test** in the current suite, regardless of whether the test passed or failed. The runner collects `afterEach` hooks in the same suite-ancestry traversal used for `beforeEach`, but calls them in **child-to-parent order** (inner suite first).
+
+<ParamField path="fn" type="TestFn" required>
+  A zero-argument synchronous function containing teardown logic. Called after each test in this suite and in all descendant suites.
+</ParamField>
+
+<Warning>
+  `afterEach()` must be called inside a `describe()` block. Calling it at the top level throws:
+  ```
+  Error: afterEach() must be called inside a describe()
+  ```
+</Warning>
+
+### Example
+
+```typescript
+import { describe, it, afterEach, expect } from 'kt-testing-suite-core';
+
+let tempFile: File;
+
+describe('File operations', () => {
+    afterEach(() => {
+        // Clean up any file created during the test
+        if (tempFile && tempFile.exists) {
+            tempFile.remove();
+        }
+    });
+
+    it('creates a file', () => {
+        tempFile = new File('/tmp/test-output.txt');
+        tempFile.open('w');
+        tempFile.write('hello');
+        tempFile.close();
+        expect(tempFile).fileExists();
+    });
+});
+```
+
+### Nested suite execution order
+
+`afterEach` hooks run in **child-to-parent order**, the inverse of `beforeEach`:
+
+```typescript
+describe('Outer', () => {
+    afterEach(() => {
+        $.writeln('outer afterEach'); // runs second
+    });
+
+    describe('Inner', () => {
+        afterEach(() => {
+            $.writeln('inner afterEach'); // runs first
+        });
+
+        it('test', () => { /* ... */ });
+    });
+});
+// Output order: test body → "inner afterEach" → "outer afterEach"
+```
+
+---
+
+## beforeAll()
+
+```typescript
+function beforeAll(fn: TestFn): void
+```
+
+Registers a callback to run **once before all tests** in the current suite. Unlike `beforeEach`, this hook is not inherited by child suites—it only executes once at the beginning of the suite it is registered in, before any tests or child suites in that suite are processed.
+
+<ParamField path="fn" type="TestFn" required>
+  A zero-argument synchronous function containing one-time setup logic. Called once before the first test in this suite runs.
+</ParamField>
+
+<Warning>
+  `beforeAll()` must be called inside a `describe()` block. Calling it at the top level throws:
+  ```
+  Error: beforeAll() must be called inside a describe()
+  ```
+</Warning>
+
+### Example
+
+```typescript
+import { describe, it, beforeAll, expect } from 'kt-testing-suite-core';
+
+let sharedData: string[];
+
+describe('Shared data tests', () => {
+    beforeAll(() => {
+        // Expensive setup done only once
+        sharedData = ['alpha', 'beta', 'gamma'];
+    });
+
+    it('has three items', () => {
+        expect(sharedData).toHaveLength(3);
+    });
+
+    it('includes alpha', () => {
+        expect(sharedData).toInclude('alpha');
+    });
+});
+```
+
+<Tip>
+  Use `beforeAll` for expensive one-time operations such as loading a file, building a lookup table, or opening a connection. Use `beforeEach` when each test requires a fresh copy of the data.
+</Tip>
+
+---
+
+## afterAll()
+
+```typescript
+function afterAll(fn: TestFn): void
+```
+
+Registers a callback to run **once after all tests** in the current suite have completed. Like `beforeAll`, it is scoped to the suite it is registered in and does not propagate to parent or child suites. It runs inside a `finally` block in the runner, so it executes even if tests within the suite threw errors.
+
+<ParamField path="fn" type="TestFn" required>
+  A zero-argument synchronous function containing one-time teardown logic. Called once after the last test in this suite (and all its children) finishes.
+</ParamField>
+
+<Warning>
+  `afterAll()` must be called inside a `describe()` block. Calling it at the top level throws:
+  ```
+  Error: afterAll() must be called inside a describe()
+  ```
+</Warning>
+
+### Example
+
+```typescript
+import { describe, it, beforeAll, afterAll, expect } from 'kt-testing-suite-core';
+
+let outputFolder: Folder;
+
+describe('Output directory tests', () => {
+    beforeAll(() => {
+        outputFolder = new Folder('/tmp/kt-test-output');
+        if (!outputFolder.exists) {
+            outputFolder.create();
+        }
+    });
+
+    afterAll(() => {
+        // Remove the directory after all tests finish
+        if (outputFolder && outputFolder.exists) {
+            outputFolder.remove();
+        }
+    });
+
+    it('confirms the folder exists', () => {
+        expect(outputFolder).toBeFolder();
+    });
+});
+```
+
+---
+
+## Error Handling in Hooks
+
+If a hook function throws an error, the runner **logs the error to `$.writeln` and continues execution**. Hook errors do not abort the suite or mark any test as failed. The log line uses the following format:
+
+```
+    ⚠️ Error in beforeEach: <message>
+    ⚠️ Error in afterAll: <message>
+```
+
+This behaviour ensures that a broken teardown hook does not silently swallow test results that were already recorded.
+
+---
+
+## Full Execution Order
+
+The table below summarises the complete order in which hooks and test bodies run for a two-level nested suite:
+
+<CodeGroup>
+```typescript Suite Definition
+describe('Parent', () => {
+    beforeAll(() => { /* A */ });
+    afterAll(() => { /* B */ });
+    beforeEach(() => { /* C */ });
+    afterEach(() => { /* D */ });
+
+    it('parent test', () => { /* E */ });
+
+    describe('Child', () => {
+        beforeAll(() => { /* F */ });
+        afterAll(() => { /* G */ });
+        beforeEach(() => { /* H */ });
+        afterEach(() => { /* I */ });
+
+        it('child test', () => { /* J */ });
+    });
+});
+```
+
+```plaintext Execution Order
+A  — Parent beforeAll
+C  — Parent beforeEach  (for "parent test")
+E  — parent test body
+D  — Parent afterEach   (for "parent test")
+F  — Child beforeAll
+C  — Parent beforeEach  (for "child test", parent-to-child)
+H  — Child beforeEach   (for "child test")
+J  — child test body
+I  — Child afterEach    (for "child test", child-to-parent)
+D  — Parent afterEach   (for "child test")
+G  — Child afterAll
+B  — Parent afterAll
+```
+</CodeGroup>

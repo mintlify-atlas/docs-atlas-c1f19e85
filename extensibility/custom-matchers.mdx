@@ -1,0 +1,265 @@
+---
+title: "Creating Custom Matchers with extendMatchers()"
+sidebarTitle: "Custom Matchers"
+description: "Extend the expect() function with domain-specific matchers using extendMatchers(). Define a Matcher<any> object and pass it to create a custom expect."
+---
+
+The built-in matchers cover general-purpose assertions, but real-world ExtendScript projects often need domain-specific checks—validating sign, parity, layer type, or any property unique to your codebase. The `extendMatchers()` function lets you define a `Matcher<any>` object with custom assertion methods and compose it into a new `expect` function that has your matchers alongside all built-in ones. No monkeypatching, no global state: each custom `expect` is a clean factory.
+
+## The `Matcher<T>` Interface
+
+A `Matcher<T>` is a plain object where every key is a function that performs an assertion and returns `this`. TypeScript's interface for it looks like this:
+
+```typescript
+export interface Matcher<T> {
+    [key: string]: (expected?: any, ...args: any[]) => Matcher<T>;
+}
+```
+
+Each method has access to several protected members of the underlying `Expect<T>` class through `this`:
+
+| Member | Description |
+|---|---|
+| `this.actual` | The raw value passed to `expect()` |
+| `this.assert(condition, message)` | Throws if `condition` is falsy (respects `.not()` inversion) |
+| `this.getSafeActual(type)` | Returns `this.actual` coerced to `'array'`, `'string'`, `'number'`, or `'any'`; returns a safe default on null/undefined/type mismatch |
+| `this.toSafeString(value)` | Converts any value to a readable string, handling `null` and `undefined` safely |
+| `this.expect(value)` | Creates a new expect instance scoped to the same matcher set, for calling sibling matchers |
+
+## The `extendMatchers()` Function
+
+`extendMatchers` is the factory that combines your matchers with the built-in `jsMatchers` and returns a fully typed `Expect<T> & Matcher<T>` instance:
+
+```typescript
+extendMatchers<T>(actual: T, matchers?: Matcher<T>[]): Expect<T> & Matcher<T>
+```
+
+You always wrap it in your own `expect` function so the signature stays familiar:
+
+```typescript
+function expect<T>(actual: T): Expect<T> & Matcher<T> {
+    return extendMatchers(actual, [myMatchers]);
+}
+```
+
+<Note>
+  Built-in matchers (`jsMatchers`) are **always included**. You never need to pass them explicitly—`extendMatchers` prepends them automatically even when you supply your own matcher array.
+</Note>
+
+## Step-by-Step: Writing a Custom Matcher
+
+<Steps>
+  <Step title="Import the required types">
+    Import `extendMatchers`, `Expect`, and `Matcher` from `kt-testing-suite-core`.
+
+    ```typescript
+    import { extendMatchers, type Matcher, Expect } from 'kt-testing-suite-core';
+    ```
+  </Step>
+
+  <Step title="Define a Matcher<any> object">
+    Create a plain object typed as `Matcher<any>`. Each key is your matcher name; the value is a regular `function` (not an arrow function—`this` binding is required).
+
+    ```typescript
+    const newCoreMatchers: Matcher<any> = {
+        toBePositive: function () {
+            // implementation goes here
+            return this;
+        }
+    };
+    ```
+  </Step>
+
+  <Step title="Implement assertion logic with this.assert()">
+    Call `this.assert(condition, message)` with a boolean condition and a descriptive failure message. `assert` automatically handles `.not()` inversion—you always write the *positive* condition.
+
+    ```typescript
+    toBePositive: function () {
+        var safeActual = this.getSafeActual('number');
+        this.assert(
+            typeof safeActual === 'number' &&
+                !isNaN(safeActual) &&
+                safeActual > 0,
+            'Expected a positive number but got ' +
+                this.toSafeString(this.actual)
+        );
+        return this;
+    }
+    ```
+  </Step>
+
+  <Step title="Use this.getSafeActual(type) for safe access">
+    Always call `getSafeActual('number')` (or `'string'`, `'array'`, `'any'`) instead of reading `this.actual` directly for type-sensitive checks. It returns a safe fallback when the value is `null`, `undefined`, or the wrong type—preventing runtime errors in ExtendScript's strict environment.
+  </Step>
+
+  <Step title="Return this for chaining">
+    Every matcher must `return this` so assertions can be chained: `expect(5).toBePositive().toBeNumber()`.
+  </Step>
+
+  <Step title="Create a custom expect function">
+    Wrap `extendMatchers` in your own `expect` so callers get the combined type:
+
+    ```typescript
+    function expect<T>(actual: T): Expect<T> & Matcher<T> {
+        return extendMatchers(actual, [newCoreMatchers]);
+    }
+    ```
+  </Step>
+</Steps>
+
+## Full Example: `toBePositive` / `toBeNegative`
+
+The following is taken directly from the test suite (`src/tests/extend.test.ts`) and shows a complete custom matcher definition, including a `toPassAny` usage that mixes custom and built-in matcher names.
+
+```typescript
+import {
+    extendMatchers,
+    type Matcher,
+    Expect,
+    expect,
+    describe,
+    it
+} from 'kt-testing-suite-core';
+
+// Define new matchers
+const newCoreMatchers: Matcher<any> = {
+    toBePositive: function () {
+        var safeActual = this.getSafeActual('number');
+        this.assert(
+            typeof safeActual === 'number' &&
+                !isNaN(safeActual) &&
+                safeActual > 0,
+            'Expected a positive number but got ' +
+                this.toSafeString(this.actual)
+        );
+        return this;
+    },
+    toBeNegative: function () {
+        var safeActual = this.getSafeActual('number');
+        this.assert(
+            typeof safeActual === 'number' &&
+                !isNaN(safeActual) &&
+                safeActual < 0,
+            'Expected a negative number but got ' +
+                this.toSafeString(this.actual)
+        );
+        return this;
+    }
+};
+
+// Wrap extendMatchers in a local expect
+function expect<T>(actual: T): Expect<T> & Matcher<T> {
+    return extendMatchers(actual, [newCoreMatchers]);
+}
+
+describe('Extend core matchers', () => {
+    it('extends with toBePositive and passes', () => {
+        expect(5).toBePositive();
+    });
+
+    it('extends with toBeNegative and passes', () => {
+        expect(-5).toBeNegative();
+    });
+
+    it('mixes new and core matchers, one succeeds with toPassAny', () => {
+        expect(42).toPassAny([
+            'toBePositive',
+            'toBeString',
+            'toBeUndefinedNot'
+        ]);
+    });
+
+    it('passes with toBePositive on zero with not', () => {
+        expect(0).not().toBePositive();
+    });
+
+    it('fails with toBePositive on negative', () => {
+        expect(() => expect(-1).toBePositive()).toThrow();
+    });
+});
+```
+
+## `toBeEven` / `toBeOdd` Example
+
+Here is another pair of matchers illustrating the same pattern with modular arithmetic:
+
+```typescript
+const customMatchers: Matcher<any> = {
+    toBeEven: function () {
+        const safeActual = this.getSafeActual('number');
+        this.assert(
+            typeof safeActual === 'number' && safeActual % 2 === 0,
+            `Expected an even number but got ${this.toSafeString(this.actual)}`
+        );
+        return this;
+    },
+    toBeOdd: function () {
+        const safeActual = this.getSafeActual('number');
+        this.assert(
+            typeof safeActual === 'number' && safeActual % 2 !== 0,
+            `Expected an odd number but got ${this.toSafeString(this.actual)}`
+        );
+        return this;
+    }
+};
+```
+
+## Using `this.expect` to Call Sibling Matchers
+
+When one matcher needs to reuse the logic of another in the **same** custom set, use `this.expect(this.actual)`. This property is injected by `extendMatchers` and creates a new instance that carries your full custom matcher set—not just the built-ins.
+
+This pattern is especially useful for layered validation: check that a value is structurally valid before asserting domain-specific properties.
+
+```typescript
+const interdependentMatchers: Matcher<any> = {
+    toBeValidNumber: function () {
+        var safeActual = this.getSafeActual('number');
+        this.assert(
+            typeof safeActual === 'number' && !isNaN(safeActual),
+            'Expected a valid number but got ' + this.toSafeString(this.actual)
+        );
+        return this;
+    },
+    toBePositiveNumber: function () {
+        // Calls toBeValidNumber from the same matcher set
+        this.expect(this.actual).toBeValidNumber();
+
+        const safeActual = this.getSafeActual('number') as unknown as number;
+        this.assert(
+            safeActual > 0,
+            'Expected a positive number but got ' + this.toSafeString(this.actual)
+        );
+        return this;
+    },
+    toBeStrictlyPositive: function () {
+        // Chains through toBePositiveNumber, which itself calls toBeValidNumber
+        this.expect(this.actual).toBePositiveNumber();
+
+        const safeActual = this.getSafeActual('number') as unknown as number;
+        this.assert(
+            safeActual >= 1,
+            'Expected a strictly positive number (>= 1) but got ' +
+                this.toSafeString(this.actual)
+        );
+        return this;
+    }
+};
+
+function expect<T>(actual: T): Expect<T> & Matcher<T> {
+    return extendMatchers(actual, [interdependentMatchers]);
+}
+
+expect(5).toBeValidNumber();        // ✅ Passes
+expect(5).toBePositiveNumber();     // ✅ Passes (calls toBeValidNumber internally)
+expect(5).toBeStrictlyPositive();   // ✅ Passes (chains through both)
+expect(-1).toBePositiveNumber();    // ❌ Fails — negative number
+expect(0).toBeStrictlyPositive();   // ❌ Fails — zero is not >= 1
+```
+
+<Tip>
+  `this.expect` uses the same `matchers` array that was passed to the enclosing `extendMatchers` call. If you later create a *different* extended `expect` with a different set, `this.expect` inside those matchers will point to that new set—there is no accidental cross-contamination.
+</Tip>
+
+<Warning>
+  Always use regular `function` syntax (not arrow functions) for matcher methods. Arrow functions do not have their own `this`, so `this.actual`, `this.assert`, and `this.expect` will all be `undefined` at runtime.
+</Warning>

@@ -1,0 +1,204 @@
+---
+title: "Filtering Tests by Name with TestRunner"
+sidebarTitle: "Filtering"
+description: "Run a subset of tests by passing a filter string to TestRunner or runTests(). Supports case-insensitive substring matching on full test names."
+---
+
+When a test suite grows large, re-running every test after a small change can be slow — especially in an ExtendScript environment where there is no native watch mode. KT Testing Suite Core lets you pass a filter string that limits execution to tests whose full name contains the filter as a substring, so you can focus on just the area you are working on without commenting out any code.
+
+## How Filtering Works
+
+The runner builds a **full test name** for each `it()` by joining the suite description path with the test name, separated by spaces. For example, a test named `'deep match'` inside `describe('Nested Suite')` which is itself inside `describe('Root Suite')` gets the full name:
+
+```
+Root Suite Nested Suite deep match
+```
+
+When a filter is active, the runner calls `shouldSkip()` on each full test name:
+
+```typescript
+private shouldSkip(fullName: string): boolean {
+  if (!this.filter) return false;
+  // Simple case-insensitive substring match
+  return fullName.toLowerCase().indexOf(this.filter.toLowerCase()) === -1;
+}
+```
+
+A test is **skipped** (silently, with no output) if its full name does not contain the filter string. A test is **run** if it does. Matching is case-insensitive and uses plain substring search — no glob syntax or regular expressions.
+
+## Passing a Filter to `runTests()`
+
+`runTests()` accepts an optional third argument for the filter string. This is the quickest way to filter without instantiating a `TestRunner` directly.
+
+```typescript
+import { runTests } from 'kt-testing-suite-core';
+
+import './math.test';
+import './stringUtils.test';
+
+// Run only tests whose full name contains "addition"
+runTests(undefined, undefined, 'addition');
+```
+
+The first two arguments are the suites array and the reporter. Passing `undefined` for both uses the defaults (`getSuites()` and `ConsoleReporter`).
+
+## Passing a Filter to `new TestRunner()`
+
+When you need finer control — for example to combine filtering with a custom reporter — pass the filter as the second argument to the `TestRunner` constructor:
+
+```typescript
+import { getSuites, TestRunner, ConsoleReporter } from 'kt-testing-suite-core';
+
+import './math.test';
+import './stringUtils.test';
+
+const reporter = new ConsoleReporter();
+const runner = new TestRunner(reporter, 'addition');
+runner.run(getSuites());
+```
+
+<Note>
+  The `filter` parameter is optional on both `runTests()` and `new TestRunner()`. Omitting it (or passing `undefined`) runs all registered tests.
+</Note>
+
+## Filter Scenarios
+
+The examples below are drawn directly from `filtering.test.ts`, which uses a programmatically constructed suite tree to verify each filtering case:
+
+```typescript
+// The mock suite structure used in all examples below:
+//
+// Root Suite
+//   ├─ test: 'match'
+//   ├─ test: 'ignore'
+//   └─ Nested Suite
+//        ├─ test: 'deep match'
+//        └─ test: 'deep ignore'
+```
+
+### No Filter — All Tests Run
+
+When no filter is provided, every test in the tree executes.
+
+```typescript
+it('should run all tests when no filter is provided', () => {
+  const suite = createMockSuite();
+  const reporter = new MockReporter();
+  const runner = new TestRunner(reporter); // No filter
+
+  runner.run([suite]);
+
+  expect(reporter.stats).toBeDefined();
+  if (reporter.stats) {
+    expect(reporter.stats.total).toBe(4);
+    expect(reporter.runTests).toHaveLength(4);
+  }
+});
+```
+
+### Simple Substring Match
+
+A filter of `'match'` matches any full test name containing the word "match". Both `'Root Suite match'` and `'Root Suite Nested Suite deep match'` qualify; `'ignore'` variants do not.
+
+```typescript
+it('should run only tests matching the filter (simple match)', () => {
+  const suite = createMockSuite();
+  const reporter = new MockReporter();
+  const runner = new TestRunner(reporter, 'match');
+
+  runner.run([suite]);
+
+  expect(reporter.stats).toBeDefined();
+  if (reporter.stats) {
+    expect(reporter.runTests).toInclude('match');
+    expect(reporter.runTests).toInclude('deep match');
+    expect(reporter.runTests).not().toInclude('ignore');
+    expect(reporter.runTests).not().toInclude('deep ignore');
+    expect(reporter.stats.total).toBe(2);
+  }
+});
+```
+
+### Matching by Suite Description
+
+Because the runner prefixes every test's full name with all of its ancestor suite descriptions, filtering on a suite description string matches **all tests inside that suite**. A filter of `'Nested'` matches `'Root Suite Nested Suite deep match'` and `'Root Suite Nested Suite deep ignore'`, but not the root-level tests whose full names contain only `'Root Suite'`.
+
+```typescript
+it('should run only tests matching the filter (nested suite description match)', () => {
+  const suite = createMockSuite();
+  const reporter = new MockReporter();
+  const runner = new TestRunner(reporter, 'Nested'); // Matches all tests in Nested Suite
+
+  runner.run([suite]);
+
+  expect(reporter.stats).toBeDefined();
+  if (reporter.stats) {
+    expect(reporter.runTests).toInclude('deep match');
+    expect(reporter.runTests).toInclude('deep ignore');
+    expect(reporter.runTests).not().toInclude('match'); // Root tests don't have "Nested"
+    expect(reporter.stats.total).toBe(2);
+  }
+});
+```
+
+### Case-Insensitive Matching
+
+The filter is compared in lowercase on both sides, so `'MATCH'`, `'Match'`, and `'match'` are all equivalent.
+
+```typescript
+it('should match case-insensitive', () => {
+  const suite = createMockSuite();
+  const reporter = new MockReporter();
+  const runner = new TestRunner(reporter, 'MATCH');
+
+  runner.run([suite]);
+
+  expect(reporter.runTests).toInclude('match');
+  expect(reporter.runTests).toInclude('deep match');
+});
+```
+
+### No Matches — Zero Tests Run
+
+If the filter string does not appear in any full test name, the runner executes zero tests and the final totals are all `0`. No error or warning is produced.
+
+```typescript
+it('should run no tests if filter matches nothing', () => {
+  const suite = createMockSuite();
+  const reporter = new MockReporter();
+  const runner = new TestRunner(reporter, 'NonExistent');
+
+  runner.run([suite]);
+
+  if (reporter.stats) {
+    expect(reporter.stats.total).toBe(0);
+  }
+});
+```
+
+<Tip>
+  Skipped tests produce **no output at all** — they are not counted in passed, failed, or total, and the reporter never receives an `onTestStart` call for them. If you want to confirm which tests actually ran, inspect the reporter's recorded test names rather than the totals.
+</Tip>
+
+## Quick Reference
+
+<CardGroup cols={2}>
+  <Card title="runTests() with filter" icon="magnifying-glass">
+    ```typescript
+    runTests(undefined, undefined, 'auth');
+    ```
+    Third argument. Uses default suites and reporter.
+  </Card>
+  <Card title="TestRunner with filter" icon="sliders">
+    ```typescript
+    new TestRunner(reporter, 'auth');
+    ```
+    Second constructor argument. Pair with any reporter.
+  </Card>
+  <Card title="Suite-level filter" icon="layer-group">
+    Filter on a suite description string (e.g. `'Nested'`) to run every test inside that suite.
+  </Card>
+  <Card title="Case-insensitive" icon="font">
+    `'AUTH'`, `'auth'`, and `'Auth'` all match the same tests — no need to match case exactly.
+  </Card>
+</CardGroup>

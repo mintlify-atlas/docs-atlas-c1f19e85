@@ -1,0 +1,325 @@
+---
+title: "Type and Existence Matchers: toBeDefined, toBeNull, toBeString"
+sidebarTitle: "Type Checks"
+description: "Check value existence, nullability, and JavaScript types. Covers toBeDefined, toBeUndefined, toBeNull, toBeString, toBeNumber, toBeBoolean, toBeFunction, toBeArray."
+---
+
+Type and existence matchers let you assert what kind of value you are dealing with before making deeper assertions. They are especially important in ExtendScript environments where Adobe host APIs can return `null`, `undefined`, or custom object types in ways that differ from standard JavaScript. All of the matchers documented here return `this`, so they are fully chainable.
+
+## Existence matchers
+
+### `toBeDefined()`
+
+Asserts that the actual value is **not** `undefined`. Any other value — including `null`, `0`, `false`, or an empty string — is considered defined.
+
+```typescript
+// ✅ Passes
+expect('test').toBeDefined();
+expect(0).toBeDefined();
+expect(null).toBeDefined();
+expect(false).toBeDefined();
+
+// ❌ Throws
+expect(() => expect(undefined).toBeDefined()).toThrow();
+```
+
+**Signature:**
+
+```typescript
+toBeDefined(): this
+```
+
+### `toBeUndefined()`
+
+Asserts that the actual value is strictly `undefined`.
+
+```typescript
+// ✅ Passes
+let value;
+expect(value).toBeUndefined();
+
+// ❌ Throws — null is not undefined
+expect(() => expect(null).toBeUndefined()).toThrow();
+```
+
+**Signature:**
+
+```typescript
+toBeUndefined(): this
+```
+
+### `toBeNull()`
+
+Asserts that the actual value is strictly `null`.
+
+```typescript
+// ✅ Passes
+expect(null).toBeNull();
+
+// ❌ Throws — 0 and undefined are not null
+expect(() => expect(0).toBeNull()).toThrow();
+expect(() => expect(undefined).toBeNull()).toThrow();
+```
+
+**Signature:**
+
+```typescript
+toBeNull(): this
+```
+
+## Numeric type matchers
+
+### `toBeNumber()`
+
+Asserts that the actual value is a `number` **and** is not `NaN`. This intentionally excludes `NaN` because `NaN` is not a valid numeric value for most arithmetic purposes.
+
+```typescript
+// ✅ Passes
+expect(42).toBeNumber();
+expect(0).toBeNumber();
+expect(-5.5).toBeNumber();
+
+// ❌ Throws — NaN is excluded
+expect(() => expect(NaN).toBeNumber()).toThrow();
+
+// ❌ Throws — string '42' is not a number type
+expect(() => expect('42').toBeNumber()).toThrow();
+expect(() => expect(null).toBeNumber()).toThrow();
+```
+
+<Warning>
+  `NaN` has the JavaScript type `"number"` but `toBeNumber()` explicitly rejects it. Use `toBeNaN()` to assert that a value is `NaN`.
+</Warning>
+
+**Signature:**
+
+```typescript
+toBeNumber(): this
+```
+
+### `toBeNaN()`
+
+Asserts that the actual value is `NaN`. This is useful when testing the output of operations that produce `NaN` on invalid input, such as `parseInt` on a non-numeric string.
+
+```typescript
+// ✅ Passes
+expect(NaN).toBeNaN();
+expect(parseInt('invalid')).toBeNaN();
+
+// ❌ Throws — 42 is a valid number, not NaN
+expect(() => expect(42).toBeNaN()).toThrow();
+```
+
+**Signature:**
+
+```typescript
+toBeNaN(): this
+```
+
+## String, boolean, and function matchers
+
+### `toBeString()`
+
+Asserts that the actual value has the JavaScript type `"string"`. Both empty and non-empty strings pass.
+
+```typescript
+// ✅ Passes
+expect('hello').toBeString();
+expect('').toBeString();
+
+// ❌ Throws — numbers are not strings
+expect(() => expect(123).toBeString()).toThrow();
+```
+
+**Signature:**
+
+```typescript
+toBeString(): this
+```
+
+### `toBeBoolean()`
+
+Asserts that the actual value has the JavaScript type `"boolean"`. Only the literals `true` and `false` pass; truthy or falsy values of other types do not.
+
+```typescript
+// ✅ Passes
+expect(true).toBeBoolean();
+expect(false).toBeBoolean();
+
+// ❌ Throws — 1 and 0 are numbers, not booleans
+expect(() => expect(1).toBeBoolean()).toThrow();
+expect(() => expect(0).toBeBoolean()).toThrow();
+```
+
+**Signature:**
+
+```typescript
+toBeBoolean(): this
+```
+
+### `toBeFunction()`
+
+Asserts that the actual value has the JavaScript type `"function"`. Both function declarations and arrow functions pass.
+
+```typescript
+// ✅ Passes
+expect(function () {}).toBeFunction();
+expect(() => {}).toBeFunction();
+
+// ❌ Throws — objects are not functions
+expect(() => expect({}).toBeFunction()).toThrow();
+```
+
+**Signature:**
+
+```typescript
+toBeFunction(): this
+```
+
+### `toBeArray()`
+
+Asserts that the actual value is an `Array` by checking `value.constructor === Array`. This approach works correctly in ExtendScript, where `instanceof` behaviour can differ across execution contexts.
+
+```typescript
+// ✅ Passes
+expect([]).toBeArray();
+expect([1, 2, 3]).toBeArray();
+
+// ❌ Throws — plain objects are not arrays
+expect(() => expect({}).toBeArray()).toThrow();
+expect(() => expect('abc').toBeArray()).toThrow();
+```
+
+**Signature:**
+
+```typescript
+toBeArray(): this
+```
+
+## `toBeInstanceOf(constructor)`
+
+Asserts that the actual value is an instance of the given constructor. The check first compares `value.constructor === expected`, then falls back to `value instanceof expected`. This two-step approach ensures correct behaviour with both standard JavaScript classes and Adobe host application classes (such as `CompItem`, `Layer`, `File`, etc.) where `instanceof` may not behave as expected across execution contexts.
+
+```typescript
+class TestClass {}
+const instance = new TestClass();
+
+// ✅ Passes
+expect(instance).toBeInstanceOf(TestClass);
+```
+
+```typescript
+// ✅ Also works with Adobe built-in classes inside a host application
+const comp = app.project.items.addComp('Test', 1920, 1080, 1, 10, 30);
+expect(comp).toBeInstanceOf(CompItem);
+comp.remove();
+```
+
+```typescript
+// ❌ Throws — plain object is not a TestClass instance
+expect(() => expect({}).toBeInstanceOf(TestClass)).toThrow();
+
+// ❌ Throws — null is not an instance of anything
+expect(() => expect(null).toBeInstanceOf(TestClass)).toThrow();
+```
+
+<Note>
+  `null` and `undefined` are handled explicitly: passing either as the actual value always fails with a descriptive message naming the expected constructor, even before `instanceof` is evaluated.
+</Note>
+
+<Tip>
+  When testing Adobe host objects such as `CompItem`, `AVLayer`, `ShapeLayer`, or `File`, prefer `toBeInstanceOf` over `toBeFile`/`toBeFolder` for custom Adobe types. The IO matchers (`toBeFile`, `toBeFolder`) specifically target ExtendScript's built-in `File` and `Folder` classes.
+</Tip>
+
+**Signature:**
+
+```typescript
+toBeInstanceOf(expected: Function): this
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `expected` | `Function` | The constructor function to check against. |
+
+## Full examples from the test suite
+
+<CodeGroup>
+
+```typescript Existence checks
+it('toBeDefined passes with defined values', () => {
+    expect('test').toBeDefined();
+    expect(0).toBeDefined();
+});
+
+it('toBeUndefined passes with undefined', () => {
+    let value;
+    expect(value).toBeUndefined();
+});
+
+it('toBeNull passes with null', () => {
+    expect(null).toBeNull();
+});
+```
+
+```typescript Number and NaN
+it('toBeNumber passes with valid numbers', () => {
+    expect(42).toBeNumber();
+    expect(0).toBeNumber();
+    expect(-5.5).toBeNumber();
+});
+
+it('toBeNumber fails with NaN', () => {
+    expect(() => expect(NaN).toBeNumber()).toThrow();
+});
+
+it('toBeNaN passes with NaN', () => {
+    expect(NaN).toBeNaN();
+});
+
+it('toBeNaN passes with invalid number parsing', () => {
+    expect(parseInt('invalid')).toBeNaN();
+});
+```
+
+```typescript String, boolean, function, array
+it('toBeString passes with strings', () => {
+    expect('hello').toBeString();
+    expect('').toBeString();
+});
+
+it('toBeBoolean passes with booleans', () => {
+    expect(true).toBeBoolean();
+    expect(false).toBeBoolean();
+});
+
+it('toBeFunction passes with functions', () => {
+    expect(function () {}).toBeFunction();
+    expect(() => {}).toBeFunction();
+});
+
+it('toBeArray passes with arrays', () => {
+    expect([]).toBeArray();
+    expect([1, 2, 3]).toBeArray();
+});
+```
+
+```typescript Sad path
+it('toBeDefined fails with undefined', () => {
+    expect(() => expect(undefined).toBeDefined()).toThrow();
+});
+
+it('toBeNull fails with non-null', () => {
+    expect(() => expect(0).toBeNull()).toThrow();
+});
+
+it('toBeNumber fails with non-numbers', () => {
+    expect(() => expect('42').toBeNumber()).toThrow();
+    expect(() => expect(null).toBeNumber()).toThrow();
+});
+
+it('toBeString fails with non-strings', () => {
+    expect(() => expect(123).toBeString()).toThrow();
+});
+```
+
+</CodeGroup>

@@ -1,0 +1,225 @@
+---
+title: "Building Custom Test Reporters"
+sidebarTitle: "Custom Reporters"
+description: "Implement the TestReporter interface to build custom test output handlers. Receive lifecycle events for test start, end, suite navigation, and final stats."
+---
+
+The built-in `ConsoleReporter` and `JSONReporter` cover the most common output scenarios, but there are plenty of reasons to go further. You might need to format results for a specific CI system's log parser, post test outcomes to an external webhook, render results inside a custom Adobe panel UI, or suppress noise and show only failures. All of this is possible by implementing the `TestReporter` interface — a six-method contract that the `TestRunner` calls at every stage of a run.
+
+## When to Use a Custom Reporter
+
+<Tabs>
+  <Tab title="CI output formatting">
+    Different CI providers recognise different log conventions. A custom reporter can emit results in JUnit XML, TAP (Test Anything Protocol), or any other format your pipeline expects — simply by writing the appropriate strings with `$.writeln` inside each lifecycle method.
+  </Tab>
+  <Tab title="External system integration">
+    If your studio uses a shared test-results dashboard or a Slack bot that listens for test outcomes, a custom reporter gives you a natural place to assemble that payload and dispatch it when `onFinished` fires. Because ExtendScript can invoke host-application APIs, you can use InDesign or After Effects scripting to write to shared network paths or trigger automations.
+  </Tab>
+  <Tab title="VS Code extension output">
+    VS Code extensions that shell out to an ExtendScript host process need to read structured output from `$.writeln`. A custom reporter lets you define exactly what that structure looks like, independently of the default `JSON_OUTPUT_START` / `JSON_OUTPUT_END` convention used by `JSONReporter`.
+  </Tab>
+</Tabs>
+
+---
+
+## The TestReporter Interface
+
+Implement `TestReporter` from `kt-testing-suite-core` and provide a concrete method for each of the six lifecycle hooks. All six must be present even if the body is a no-op, because the `TestRunner` calls them unconditionally.
+
+```typescript
+import { TestReporter } from 'kt-testing-suite-core';
+import { Suite, Test } from 'kt-testing-suite-core';
+import { TestResult } from 'kt-testing-suite-core';
+
+export interface TestReporter {
+  onStart(): void;
+  onSuiteStart(suite: Suite): void;
+  onTestStart(test: Test): void;
+  onTestEnd(test: Test, result: TestResult): void;
+  onSuiteEnd(suite: Suite): void;
+  onFinished(results: { passed: number; failed: number; total: number }): void;
+}
+```
+
+### Method reference
+
+| Method | Parameters | Called when |
+|---|---|---|
+| `onStart()` | — | Once, before the first suite runs |
+| `onSuiteStart(suite)` | `suite: Suite` | Entering a `describe` block |
+| `onTestStart(test)` | `test: Test` | Just before an `it` callback executes |
+| `onTestEnd(test, result)` | `test: Test`, `result: TestResult` | After an `it` callback completes (any outcome) |
+| `onSuiteEnd(suite)` | `suite: Suite` | After all tests and nested suites in a `describe` finish |
+| `onFinished(results)` | `{ passed, failed, total }` | Once, after every suite has run |
+
+### TestResult in detail
+
+The `result` argument passed to `onTestEnd` carries everything you need to classify and display a test outcome:
+
+```typescript
+export interface TestResult {
+  name: string;
+  status: 'passed' | 'failed' | 'skipped';
+  error?: {
+    message: string;
+    fileName?: string;  // source file path, if available from ExtendScript
+    line?: number;      // line number, if available from ExtendScript
+  };
+  duration?: number;
+}
+```
+
+- `status` is always one of the three string literals — no numeric codes.
+- `error` is `undefined` for passing and skipped tests; it is populated only when `status === 'failed'`.
+- `fileName` and `line` come from the raw ExtendScript error object and may be absent in some host environments.
+
+<Note>
+The `Suite` and `Test` types are defined in the core `types` module. A `Suite` carries `description`, `tests`, `children` (nested suites), and hook functions (`beforeAll`, `afterAll`, `beforeEach`, `afterEach`). A `Test` carries `name` and `fn` (the test callback).
+</Note>
+
+---
+
+## A Complete Custom Reporter Example
+
+The example below is a minimal but fully functional reporter. It prefixes each test result with a plain `OK` or `FAIL` label rather than emoji, and prints a one-line summary when the run is complete — a format that many log parsers find easier to grep.
+
+```typescript
+import { TestReporter } from 'kt-testing-suite-core';
+import { Suite, Test } from 'kt-testing-suite-core';
+import { TestResult } from 'kt-testing-suite-core';
+
+class MyCustomReporter implements TestReporter {
+  onStart(): void {
+    $.writeln('--- Starting Tests ---');
+  }
+
+  onSuiteStart(suite: Suite): void {
+    $.writeln(`Entering: ${suite.description}`);
+  }
+
+  onTestStart(test: Test): void {
+    // Called before test execution — useful for timing or logging test name early
+  }
+
+  onTestEnd(test: Test, result: TestResult): void {
+    const icon = result.status === 'passed' ? 'OK' : 'FAIL';
+    $.writeln(`[${icon}] ${test.name}`);
+  }
+
+  onSuiteEnd(suite: Suite): void {
+    // Called after suite execution — useful for per-suite summaries
+  }
+
+  onFinished(results: { passed: number; failed: number; total: number }): void {
+    $.writeln(`--- Done. Passed: ${results.passed}/${results.total} ---`);
+  }
+}
+
+// Register and run
+import { runTests } from 'kt-testing-suite-core';
+runTests(undefined, new MyCustomReporter());
+```
+
+This produces output like:
+
+```text
+--- Starting Tests ---
+Entering: Math Operations
+[OK] should add two numbers
+[OK] should subtract two numbers
+--- Done. Passed: 2/2 ---
+```
+
+---
+
+## Extending ConsoleReporter as a Base
+
+If you want all the standard human-readable output _plus_ some additional behaviour, extend `ConsoleReporter` and override only the methods you need. This pattern is useful for test utilities, mock reporters in meta-tests, and scenarios where you want to intercept results without losing the existing log output.
+
+```typescript
+import { ConsoleReporter } from 'kt-testing-suite-core';
+import { Test } from 'kt-testing-suite-core';
+import { TestResult } from 'kt-testing-suite-core';
+
+class AuditingReporter extends ConsoleReporter {
+  private failures: TestResult[] = [];
+
+  // Override onTestEnd to capture failures, then call super to keep console output
+  onTestEnd(test: Test, result: TestResult): void {
+    super.onTestEnd(test, result);   // preserve ✅ / ❌ console lines
+
+    if (result.status === 'failed') {
+      this.failures.push(result);
+    }
+  }
+
+  // Override onFinished to append a failure digest after the standard summary
+  onFinished(results: { passed: number; failed: number; total: number }): void {
+    super.onFinished(results);       // preserve "Test Results: Passed/Failed" block
+
+    if (this.failures.length > 0) {
+      $.writeln('\n--- Failure Digest ---');
+      for (let i = 0; i < this.failures.length; i++) {
+        const f = this.failures[i];
+        $.writeln(`  ${i + 1}. ${f.name}: ${f.error ? f.error.message : 'unknown error'}`);
+      }
+    }
+  }
+}
+```
+
+<Tip>
+The `MockReporter` pattern — extending `ConsoleReporter` and recording events into arrays — is also handy when you want to write tests _about_ your test runner itself. Store each `onTestEnd` call in a `results` array, then assert on its contents after `runner.run()` returns.
+</Tip>
+
+---
+
+## Registering a Custom Reporter
+
+Pass your reporter instance as the second argument to `runTests()`, or provide it directly to the `TestRunner` constructor. Both paths lead to the same `TestRunner` internals.
+
+<CodeGroup>
+
+```typescript Via runTests()
+import { runTests } from 'kt-testing-suite-core';
+
+runTests(undefined, new MyCustomReporter());
+```
+
+```typescript Via TestRunner constructor
+import { TestRunner } from 'kt-testing-suite-core';
+
+const runner = new TestRunner(new MyCustomReporter());
+runner.run(mySuites);
+```
+
+```typescript With a filter and custom reporter
+import { runTests } from 'kt-testing-suite-core';
+
+// Third argument is an optional name filter (case-insensitive substring)
+runTests(undefined, new MyCustomReporter(), 'should add');
+```
+
+</CodeGroup>
+
+<Warning>
+If you omit the reporter argument entirely, `TestRunner` defaults to a new `ConsoleReporter`. Always pass your custom reporter explicitly — there is no global reporter registration mechanism.
+</Warning>
+
+---
+
+## A Note on `$.writeln` in ExtendScript
+
+All output inside Adobe ExtendScript must use `$.writeln()` rather than `console.log()`. The `$` object is the ExtendScript global host object, and `$.writeln` is the standard way to write a line to the host application's JavaScript console (visible in the ExtendScript Toolkit or routed to an IDE extension's output channel).
+
+```typescript
+// ✅ Correct — works in all Adobe ExtendScript hosts
+$.writeln('Suite started: ' + suite.description);
+
+// ❌ Incorrect — console is not defined in ExtendScript
+console.log('Suite started: ' + suite.description);
+```
+
+<Note>
+When building reporters intended for use in both ExtendScript and a Node.js test harness, you can guard the call: `typeof $ !== 'undefined' ? $.writeln(msg) : console.log(msg)`. For pure ExtendScript targets, `$.writeln` is always safe.
+</Note>

@@ -1,0 +1,344 @@
+---
+title: "Reporter Classes and TestReporter Interface API"
+sidebarTitle: "Reporters API"
+description: "API reference for TestReporter interface, ConsoleReporter, JSONReporter, TestResult, and SuiteResult. Implement TestReporter to build custom output handlers."
+---
+
+Reporters are the output layer of KT Testing Suite Core. The runner knows nothing about how results should be presented—it simply calls well-defined lifecycle methods on whatever object you pass as the reporter. The library ships two built-in implementations: `ConsoleReporter`, which prints human-readable lines via `$.writeln`, and `JSONReporter`, which additionally builds a structured result tree and emits JSON either to a file or as delimited output on `$.writeln`. You can also implement the `TestReporter` interface yourself to produce any output format you need.
+
+---
+
+## Type Definitions
+
+### TestResult
+
+```typescript
+interface TestResult {
+    name: string;
+    status: 'passed' | 'failed' | 'skipped';
+    error?: {
+        message: string;
+        fileName?: string;
+        line?: number;
+    };
+    duration?: number;
+}
+```
+
+Describes the outcome of a single test case as passed to `onTestEnd`.
+
+<ResponseField name="name" type="string" required>
+  The test name as passed to `it()`.
+</ResponseField>
+<ResponseField name="status" type="'passed' | 'failed' | 'skipped'" required>
+  The result of the test run. The runner currently sets `'passed'` or `'failed'`; `'skipped'` is available for custom reporters or future use.
+</ResponseField>
+<ResponseField name="error" type="object">
+  Present only when `status` is `'failed'`. Contains the details of the thrown error.
+  <Expandable title="error fields">
+    <ResponseField name="error.message" type="string" required>
+      The error message string from the caught exception.
+    </ResponseField>
+    <ResponseField name="error.fileName" type="string">
+      The source file where the error originated. Populated from `e.fileName` on ExtendScript error objects; may be `undefined` in non-ExtendScript environments.
+    </ResponseField>
+    <ResponseField name="error.line" type="number">
+      The line number in the source file. Populated from `e.line` on ExtendScript error objects; may be `undefined`.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+<ResponseField name="duration" type="number">
+  Elapsed time in milliseconds for this test. Not currently populated by the built-in runner but included in the interface for custom implementations.
+</ResponseField>
+
+---
+
+### SuiteResult
+
+```typescript
+interface SuiteResult {
+    description: string;
+    tests: TestResult[];
+    suites: SuiteResult[];
+}
+```
+
+Represents the collected results for one suite, including all its direct tests and any nested child suites. `JSONReporter` builds a tree of these objects as the run progresses.
+
+<ResponseField name="description" type="string" required>
+  The suite label as passed to `describe()`.
+</ResponseField>
+<ResponseField name="tests" type="TestResult[]" required>
+  The results of all tests registered directly on this suite.
+</ResponseField>
+<ResponseField name="suites" type="SuiteResult[]" required>
+  Results for any nested `describe` blocks inside this suite.
+</ResponseField>
+
+---
+
+## TestReporter interface
+
+```typescript
+interface TestReporter {
+    onStart(): void;
+    onSuiteStart(suite: Suite): void;
+    onTestStart(test: Test): void;
+    onTestEnd(test: Test, result: TestResult): void;
+    onSuiteEnd(suite: Suite): void;
+    onFinished(results: { passed: number; failed: number; total: number }): void;
+}
+```
+
+All six methods must be implemented. The runner calls them in the order described below.
+
+<ResponseField name="onStart()" type="void">
+  Called once before any suite is processed. Use this to initialise state, print a header, or open output streams.
+</ResponseField>
+<ResponseField name="onSuiteStart(suite: Suite)" type="void">
+  Called each time the runner begins processing a suite (including nested suites). `suite` is the raw `Suite` object, not a `SuiteResult`.
+</ResponseField>
+<ResponseField name="onTestStart(test: Test)" type="void">
+  Called immediately before a test function is invoked. `test` is the raw `Test` object containing `name` and `fn`.
+</ResponseField>
+<ResponseField name="onTestEnd(test: Test, result: TestResult)" type="void">
+  Called after a test finishes, whether it passed or failed. `result` carries the outcome and any error details.
+</ResponseField>
+<ResponseField name="onSuiteEnd(suite: Suite)" type="void">
+  Called after all tests and child suites in a suite have been processed (inside the `finally` block, so it always runs).
+</ResponseField>
+<ResponseField name="onFinished(results)" type="void">
+  Called once after all root suites have been processed. `results` contains aggregate `passed`, `failed`, and `total` counts.
+</ResponseField>
+
+---
+
+## ConsoleReporter
+
+```typescript
+class ConsoleReporter implements TestReporter
+```
+
+The default reporter. Prints human-readable output to the ExtendScript console using `$.writeln`. All six `TestReporter` methods are implemented; `onStart` and `onSuiteEnd` are no-ops.
+
+### Output Format
+
+```plaintext
+Suite: <suite.description>
+  Test: <test.name>
+    ✅ Passed
+  Test: <failing test name>
+    ❌ Failed: <error.message>
+                            <error.fileName>
+                            <error.line>
+
+Test Results:
+Passed: <n>
+Failed: <n>
+```
+
+### Method Implementations
+
+| Method | Behaviour |
+|---|---|
+| `onStart()` | No-op |
+| `onSuiteStart(suite)` | `$.writeln('Suite: ' + suite.description)` |
+| `onTestStart(test)` | `$.writeln('  Test: ' + test.name)` |
+| `onTestEnd(test, result)` | Prints `✅ Passed`, `❌ Failed: …`, or `⚠️ Skipped` |
+| `onSuiteEnd(suite)` | No-op |
+| `onFinished(results)` | Prints the summary block with passed/failed counts |
+
+### Example
+
+```typescript
+import { runTests, ConsoleReporter } from 'kt-testing-suite-core';
+
+// ConsoleReporter is the default; these are equivalent:
+runTests();
+runTests(undefined, new ConsoleReporter());
+```
+
+---
+
+## JSONReporter
+
+```typescript
+class JSONReporter implements TestReporter {
+    constructor(outputPath?: string)
+}
+```
+
+Extends the behaviour of `ConsoleReporter` by additionally building a structured `SuiteResult` tree during the run and emitting a JSON document when `onFinished` is called.
+
+### constructor()
+
+<ParamField path="outputPath" type="string">
+  An absolute file path where the JSON report should be written. If omitted, the JSON is written to `$.writeln` wrapped in delimiter lines (see [JSON Output Format](#json-output-format) below). If provided, the runner will attempt to open the file for writing via the ExtendScript `File` API.
+</ParamField>
+
+### Internal State
+
+`JSONReporter` maintains two private data structures alongside a `ConsoleReporter` delegate:
+
+<ResponseField name="rootSuites" type="SuiteResult[]">
+  The list of top-level `SuiteResult` objects. Populated during `onSuiteStart` / `onSuiteEnd` as the runner traverses the tree.
+</ResponseField>
+<ResponseField name="suiteStack" type="SuiteResult[]">
+  A stack that tracks the currently active suite during traversal. `onSuiteStart` pushes a new `SuiteResult`; `onSuiteEnd` pops it. Nested suites are automatically linked to their parent via `parent.suites.push(child)`.
+</ResponseField>
+
+### Delegation to ConsoleReporter
+
+`JSONReporter` delegates every console-output operation to an internal `ConsoleReporter` instance. This means running with `JSONReporter` produces the same human-readable output as `ConsoleReporter` **plus** the JSON document at the end.
+
+| JSONReporter method | Console delegation |
+|---|---|
+| `onStart()` | Resets `rootSuites` and `suiteStack`, then calls `consoleReporter.onStart()` |
+| `onSuiteStart(suite)` | Builds `SuiteResult`, links to parent or `rootSuites`, calls `consoleReporter.onSuiteStart()` |
+| `onTestStart(test)` | Calls `consoleReporter.onTestStart()` |
+| `onTestEnd(test, result)` | Pushes `result` onto current suite's `tests`, calls `consoleReporter.onTestEnd()` |
+| `onSuiteEnd(suite)` | Pops `suiteStack`, calls `consoleReporter.onSuiteEnd()` |
+| `onFinished(results)` | Calls `consoleReporter.onFinished()`, then emits JSON |
+
+### JSON Output Format
+
+The emitted JSON has the following shape:
+
+```typescript
+{
+    stats: {
+        passed: number;
+        failed: number;
+        total: number;
+    };
+    suites: SuiteResult[];
+}
+```
+
+**When `outputPath` is not set**, the JSON is written to `$.writeln` between two delimiter lines that allow an external script or host process to extract it reliably:
+
+```
+JSON_OUTPUT_START
+{
+  "stats": { "passed": 3, "failed": 1, "total": 4 },
+  "suites": [ ... ]
+}
+JSON_OUTPUT_END
+```
+
+**When `outputPath` is set**, the JSON is written directly to the file using the ExtendScript `File` API. If the write fails, an error is logged to `$.writeln`:
+
+```
+    ⚠️ Error writing JSON report to /path/to/file: <message>
+```
+
+### Example
+
+<CodeGroup>
+```typescript Write to file
+import { runTests, JSONReporter } from 'kt-testing-suite-core';
+
+runTests(undefined, new JSONReporter('/tmp/test-results.json'));
+```
+
+```typescript Inline output (no path)
+import { runTests, JSONReporter } from 'kt-testing-suite-core';
+
+// JSON emitted to $.writeln between JSON_OUTPUT_START / JSON_OUTPUT_END
+runTests(undefined, new JSONReporter());
+```
+</CodeGroup>
+
+### Sample JSON output
+
+```json
+{
+  "stats": {
+    "passed": 2,
+    "failed": 1,
+    "total": 3
+  },
+  "suites": [
+    {
+      "description": "Math operations",
+      "tests": [
+        { "name": "adds numbers", "status": "passed" },
+        { "name": "subtracts numbers", "status": "passed" }
+      ],
+      "suites": []
+    },
+    {
+      "description": "String operations",
+      "tests": [
+        {
+          "name": "detects empty string",
+          "status": "failed",
+          "error": {
+            "message": "Expected 'hello' to be empty",
+            "fileName": "tests.ts",
+            "line": 42
+          }
+        }
+      ],
+      "suites": []
+    }
+  ]
+}
+```
+
+---
+
+## Implementing a Custom Reporter
+
+Implement `TestReporter` to produce any output you need—XML, a CEP panel message, a BridgeTalk packet, or anything else.
+
+```typescript
+import { TestReporter, TestResult } from 'kt-testing-suite-core';
+import { Suite, Test } from 'kt-testing-suite-core';
+
+class TAPReporter implements TestReporter {
+    private testNumber = 0;
+
+    onStart(): void {
+        $.writeln('TAP version 13');
+    }
+
+    onSuiteStart(suite: Suite): void {
+        $.writeln('# ' + suite.description);
+    }
+
+    onTestStart(test: Test): void {
+        // no-op
+    }
+
+    onTestEnd(test: Test, result: TestResult): void {
+        this.testNumber++;
+        if (result.status === 'passed') {
+            $.writeln('ok ' + this.testNumber + ' - ' + test.name);
+        } else {
+            $.writeln('not ok ' + this.testNumber + ' - ' + test.name);
+            if (result.error) {
+                $.writeln('  ---');
+                $.writeln('  message: ' + result.error.message);
+                $.writeln('  ...');
+            }
+        }
+    }
+
+    onSuiteEnd(suite: Suite): void {
+        // no-op
+    }
+
+    onFinished(results: { passed: number; failed: number; total: number }): void {
+        $.writeln('1..' + results.total);
+    }
+}
+
+// Use it
+import { runTests } from 'kt-testing-suite-core';
+runTests(undefined, new TAPReporter());
+```
+
+<Tip>
+  If you want both human-readable console output and your custom format, instantiate a `ConsoleReporter` inside your class and delegate to it the same way `JSONReporter` does.
+</Tip>

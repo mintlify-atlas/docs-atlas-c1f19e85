@@ -1,0 +1,168 @@
+---
+title: "Adobe IO Matchers: toBeFile, toBeFolder, fileExists"
+sidebarTitle: "IO Matchers"
+description: "Assert on ExtendScript File and Folder objects. Checks for File/Folder instances and filesystem existence inside Adobe host applications."
+---
+
+The IO matchers are purpose-built for ExtendScript's built-in `File` and `Folder` classes. These are **not** Node.js `fs` objects — they are the native filesystem representations exposed by the Adobe ExtendScript engine inside host applications such as After Effects, Premiere Pro, Illustrator, InDesign, and Photoshop. Because these classes only exist at runtime inside an Adobe host, the IO matchers will throw a reference error if you attempt to use them in a plain Node.js environment.
+
+<Warning>
+  IO matchers require an active Adobe host application session. They will not work in a standard Node.js test runner because `File` and `Folder` are not defined outside the ExtendScript runtime.
+</Warning>
+
+## `toBeFile()`
+
+Asserts that the actual value is an instance of ExtendScript's built-in `File` class. The check is performed with `instanceof File`. Passing a `Folder` instance, a plain string path, or any other value will cause the assertion to fail.
+
+```typescript
+// ✅ Passes — value is a File instance
+var file = new File('test.txt');
+expect(file).toBeFile();
+
+// ❌ Throws — a Folder is not a File
+var folder = new Folder('/some/path');
+expect(() => expect(folder).toBeFile()).toThrow();
+
+// ❌ Throws — a plain string is not a File
+expect(() => expect('/path/to/file.txt').toBeFile()).toThrow();
+```
+
+**Signature:**
+
+```typescript
+toBeFile(): this
+```
+
+## `toBeFolder()`
+
+Asserts that the actual value is an instance of ExtendScript's built-in `Folder` class. The check is performed with `instanceof Folder`. Passing a `File` instance or any other value will cause the assertion to fail.
+
+```typescript
+// ✅ Passes — value is a Folder instance
+var folder = new Folder('/path/to/folder');
+expect(folder).toBeFolder();
+
+// ❌ Throws — a File is not a Folder
+var file = new File('test.txt');
+expect(() => expect(file).toBeFolder()).toThrow();
+```
+
+**Signature:**
+
+```typescript
+toBeFolder(): this
+```
+
+## `toBeFileOrFolder()`
+
+Asserts that the actual value is either a `File` instance or a `Folder` instance. Internally this matcher delegates to `toPassAny(['toBeFile', 'toBeFolder'])`, so it passes if either `toBeFile` or `toBeFolder` succeeds.
+
+```typescript
+// ✅ Passes — File instance
+expect(new File('test.txt')).toBeFileOrFolder();
+
+// ✅ Passes — Folder instance
+expect(new Folder('/some/path')).toBeFileOrFolder();
+
+// ❌ Throws — plain string is neither
+expect(() => expect('/some/path').toBeFileOrFolder()).toThrow();
+
+// ❌ Throws — null is neither
+expect(() => expect(null).toBeFileOrFolder()).toThrow();
+```
+
+<Tip>
+  Use `toBeFileOrFolder` when your code accepts either a `File` or `Folder` and you want a single assertion to cover both cases. If you need to discriminate between the two, use `toBeFile` or `toBeFolder` individually.
+</Tip>
+
+**Signature:**
+
+```typescript
+toBeFileOrFolder(): this
+```
+
+## `fileExists()`
+
+Asserts both that the actual value is a `File` instance **and** that the file actually exists on the filesystem (`file.exists === true`). The check is a two-step sequence: first `toBeFile()` is evaluated, then the `.exists` property is asserted with `toBe(true)`. If the value is not a `File` at all, the assertion fails at the first step before `.exists` is ever read.
+
+```typescript
+// ✅ Passes — value is a File that exists on disk
+var existingFile = new File('/path/to/existing-file.txt');
+expect(existingFile).fileExists();
+
+// ❌ Throws — File object for a path that does not exist
+var missingFile = new File('/path/to/nonexistent.txt');
+expect(() => expect(missingFile).fileExists()).toThrow();
+
+// ❌ Throws — not a File at all
+expect(() => expect('/some/path').fileExists()).toThrow();
+```
+
+<Note>
+  `fileExists` does not check `Folder` objects. To check whether a folder exists on disk, use `toBeFolder()` and then separately assert `expect(folder.exists).toBe(true)` or use `toBeInstanceOf(Folder)` followed by a property assertion.
+</Note>
+
+**Signature:**
+
+```typescript
+fileExists(): this
+```
+
+## Usage in a host application
+
+The following example shows how to use IO matchers inside an ExtendScript test that runs in After Effects:
+
+```typescript
+import { describe, it, expect } from 'kt-testing-suite-core';
+
+describe('IOMatchers', () => {
+    it('should be able to read a file', () => {
+        var file = new File('test.txt');
+        expect(file).toBeFile();
+    });
+
+    it('verifies a folder instance', () => {
+        var folder = new Folder(Folder.desktop.fsName);
+        expect(folder).toBeFolder();
+    });
+
+    it('accepts either File or Folder', () => {
+        var file = new File('test.txt');
+        var folder = new Folder('/tmp');
+        expect(file).toBeFileOrFolder();
+        expect(folder).toBeFileOrFolder();
+    });
+});
+```
+
+## Internal implementation
+
+The IO matchers are registered separately from the core JS matchers and are defined in `src/expect/matchers/io.ts`. They rely on `toPassAny` from the core matcher set, which means `toBeFileOrFolder` benefits from the same short-circuit behaviour: as soon as one condition passes, the overall assertion succeeds without evaluating the remaining conditions.
+
+```typescript
+// Simplified view of the IO matcher implementations
+toBeFile: function () {
+    var safeActual = this.getSafeActual('any');
+    expect(safeActual instanceof File).toBe(true);
+    return this;
+},
+
+toBeFolder: function () {
+    var safeActual = this.getSafeActual('any');
+    expect(safeActual instanceof Folder).toBe(true);
+    return this;
+},
+
+toBeFileOrFolder: function () {
+    var safeActual = this.getSafeActual('any');
+    expect(safeActual).toPassAny(['toBeFile', 'toBeFolder']);
+    return this;
+},
+
+fileExists: function () {
+    var safeActual = this.getSafeActual('any');
+    expect(safeActual).toBeFile();
+    expect(safeActual.exists).toBe(true);
+    return this;
+}
+```

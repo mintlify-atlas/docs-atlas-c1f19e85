@@ -1,0 +1,183 @@
+---
+title: "Negating Matchers with not()"
+sidebarTitle: "Negation"
+description: "Invert any matcher by calling not() before the assertion. Learn the correct not() invocation syntax and how it interacts with combined matchers."
+---
+
+Every `Expect<T>` instance carries an internal `inverted` flag that flips the pass/fail logic of the next matcher. The `not()` method toggles this flag and returns the same instance, allowing you to write expressive negative assertions — "this value should NOT be a string", "this function should NOT throw" — using the same fluent chain syntax you already know.
+
+## How `not()` works
+
+When `inverted` is `false` (the default), a matcher asserts that its condition is `true`. When `inverted` is `true`, the matcher asserts that the same condition is `false`. Calling `not()` a second time toggles the flag back to `false` (double-negation), restoring normal assertion behaviour.
+
+The `inverted` flag is read by the internal `assert` method that every matcher calls. Rather than changing the matcher logic itself, `not()` simply inverts the boolean result before deciding whether to throw.
+
+## Syntax: always call `not()` as a function
+
+`not` is a **method**, not a property. It must be called with parentheses:
+
+```typescript
+// ✅ Correct
+expect(x).not().toBe(y);
+
+// ❌ Incorrect — not() is never invoked, inverted flag is never set
+expect(x).not.toBe(y);
+```
+
+Omitting the parentheses accesses the function reference without calling it, so the `inverted` flag is never toggled and the assertion behaves as if `not()` were absent.
+
+## Basic examples
+
+```typescript
+// ✅ 5 is not 10
+expect(5).not().toBe(10);
+
+// ✅ null is not defined (null !== undefined)
+expect(null).not().toBeDefined();
+
+// ✅ [1, 2, 3] is not empty
+expect([1, 2, 3]).not().toBeEmpty();
+
+// ✅ 42 is not a string
+expect(42).not().toBeString();
+
+// ✅ 10 is not greater than 15
+expect(10).not().toBeGreaterThan(15);
+
+// ❌ Throws — "hello" IS a string, so not().toBeString() fails
+expect(() => expect('hello').not().toBeString()).toThrow();
+```
+
+## Negating `toThrow`
+
+The most common use of `not()` is asserting that a function does **not** throw an error. This is useful for confirming that a code path completes cleanly:
+
+```typescript
+// ✅ Passes — function returns without throwing
+expect(() => {
+    return 42;
+}).not().toThrow();
+
+// ✅ Passes — empty function does not throw
+expect(() => {
+    /* nothing */
+}).not().toThrow();
+
+// ✅ Passes — multiple assertions inside a wrapper function
+expect(() => {
+    expect(5).toBeNumber();
+    expect('hello').toBeString();
+}).not().toThrow();
+```
+
+When the wrapped function **does** throw, `not().toThrow()` fails:
+
+```typescript
+// ❌ Throws — the inner function throws, so not().toThrow() fails
+expect(() => {
+    expect(() => {
+        throw new Error('Test error');
+    }).not().toThrow();
+}).toThrow();
+```
+
+<Warning>
+  `not().toThrow()` requires the actual value to be a **function**. Passing a non-function (such as `42`, `null`, or `undefined`) always fails — the matcher cannot execute a non-function, so the "did it throw?" question is unanswerable.
+</Warning>
+
+```typescript
+// ❌ All throw — non-function values are invalid for toThrow
+expect(() => expect(42).not().toThrow()).toThrow();
+expect(() => expect(null).not().toThrow()).toThrow();
+expect(() => expect(undefined).not().toThrow()).toThrow();
+```
+
+## Chaining after `not()`
+
+Because `not()` returns the same `Expect<T>` instance, you can continue the chain normally after the negated matcher:
+
+```typescript
+// Each matcher in the chain sees the flag state at the point it is called.
+// not() only inverts the NEXT assertion because toBeString() resets the
+// internal flow — subsequent matchers start from the same base instance.
+expect(42)
+    .not().toBeString()
+    .toBeNumber();
+```
+
+<Note>
+  The `inverted` flag is not automatically reset after each assertion. If you need to chain a positive assertion after a negated one, be aware of the flag state. In practice, most chains use `not()` for a single negated assertion and do not mix positive and negative matchers in the same chain.
+</Note>
+
+## Using `not()` with `toPassAny` via the `'Not'` suffix
+
+When building `toPassAny` condition lists, you can negate individual conditions without calling `not()` directly — append `Not` to the matcher name string instead. This invokes `not()` on a temporary `Expect` instance scoped to that condition only, leaving the outer assertion unaffected:
+
+```typescript
+// ✅ Passes — 5 is NOT a string (toBeStringNot passes)
+expect(5).toPassAny([
+    'toBeStringNot',
+    { toBeLessThan: 3 }
+]);
+
+// ✅ Passes — 5 is NOT less than 3 (toBeLessThanNot passes)
+expect(5).toPassAny([
+    { toBeLessThanNot: 3 },
+    'toBeBoolean'
+]);
+```
+
+See the [Collections](/matchers/collections) page for the full `toPassAny` reference.
+
+## Full examples from the test suite
+
+The following examples come directly from the `toNotThrow Suite` in `baseMatchers.test.ts`:
+
+<CodeGroup>
+
+```typescript Happy path
+it('passes when function does not throw', () => {
+    expect(() => {
+        return 42;
+    })
+        .not()
+        .toThrow();
+
+    expect(() => {
+        /* Empty function */
+    })
+        .not()
+        .toThrow();
+});
+
+it('Should combine with other Matchers', () => {
+    expect(() => {
+        expect(5).toBeNumber();
+        expect('hello').toBeString();
+    })
+        .not()
+        .toThrow();
+});
+```
+
+```typescript Sad path
+it('fails when function throws', () => {
+    expect(() => {
+        expect(() => {
+            throw new Error('Test error');
+        })
+            .not()
+            .toThrow();
+    }).toThrow();
+});
+```
+
+```typescript Non-function inputs
+it('fails with non-function values', () => {
+    expect(() => expect(42).not().toThrow()).toThrow();
+    expect(() => expect(null).not().toThrow()).toThrow();
+    expect(() => expect(undefined).not().toThrow()).toThrow();
+});
+```
+
+</CodeGroup>

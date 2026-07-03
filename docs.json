@@ -1,72 +1,93 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mintlify Starter Kit",
+  "name": "KT Testing Suite Core",
+  "theme": "luma",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#22f48d",
+    "light": "#55fb8b",
+    "dark": "#c9fcd1"
   },
-  "favicon": "/favicon.svg",
-  "navigation": {
-    "pages": [
-      {
-        "group": "Getting Started",
-        "pages": [
-          "index",
-          "quickstart"
-        ]
-      }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
+  "favicon": "https://media.brand.dev/aed898d9-e898-4105-b29b-dc04fe6dc1c7.svg",
   "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
+    "light": "https://media.brand.dev/dccf1387-3a79-420a-92e6-31ea1c243e3b.svg",
+    "dark": "https://media.brand.dev/de9ec057-beb7-4eab-8205-bf810b5c5458.svg"
   },
   "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
     "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://app.mintlify.com"
+      "type": "github",
+      "href": "https://github.com/Octopodo/kt-testing-suite-core"
     }
-  },
-  "contextual": {
-    "options": [
-      "copy",
-      "view",
-      "chatgpt",
-      "claude",
-      "perplexity",
-      "mcp",
-      "cursor",
-      "vscode"
-    ]
   },
   "footer": {
     "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
+      "github": "https://github.com/Octopodo/kt-testing-suite-core"
     }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Writing Tests",
+            "pages": [
+              "writing-tests/test-structure",
+              "writing-tests/hooks",
+              "writing-tests/filtering"
+            ]
+          },
+          {
+            "group": "Matchers",
+            "pages": [
+              "matchers/overview",
+              "matchers/equality",
+              "matchers/type-checks",
+              "matchers/numeric",
+              "matchers/collections",
+              "matchers/io",
+              "matchers/negation"
+            ]
+          },
+          {
+            "group": "Extensibility",
+            "pages": [
+              "extensibility/custom-matchers",
+              "extensibility/namespaces",
+              "extensibility/adobe-type-helpers"
+            ]
+          },
+          {
+            "group": "Reporters",
+            "pages": [
+              "reporters/overview",
+              "reporters/custom-reporters"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core API",
+            "pages": [
+              "api/describe-it",
+              "api/expect",
+              "api/hooks",
+              "api/runner",
+              "api/reporters"
+            ]
+          }
+        ]
+      }
+    ]
   }
 }

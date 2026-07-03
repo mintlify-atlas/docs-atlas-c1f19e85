@@ -1,0 +1,151 @@
+---
+title: "Installing KT Testing Suite Core in Your Project"
+sidebarTitle: "Installation"
+description: "Add kt-testing-suite-core to an Adobe extension project. Requirements, package manager commands, and kt.config.json build setup."
+---
+
+KT Testing Suite Core is published to npm and is designed to live alongside your ExtendScript source code. Because the package ships its TypeScript source directly rather than a pre-compiled bundle, the `kt-extendscript-builder` CLI handles compilation at build time — pulling in the library source together with your own test files and emitting a single self-contained ExtendScript output file.
+
+## Requirements
+
+Before installing, confirm your project meets the following prerequisites:
+
+- **TypeScript project** — your extension code is written in TypeScript and compiled by `kt-extendscript-builder` (`kt-build` CLI).
+- **`kt-extendscript-builder` dev dependency** — provides the `kt-build` command that compiles both your code and `kt-testing-suite-core`'s source into a valid ExtendScript bundle.
+- **Adobe CC host application** — tests execute inside the Adobe host (After Effects, Premiere Pro, Illustrator, etc.); the host must be installed and accessible to the [ExtendScript Debugger](https://marketplace.visualstudio.com/items?itemName=Adobe.extendscript-debug) VS Code extension.
+- **Node.js ≥ 14** — required by the build toolchain; the compiled output itself has no Node.js dependency.
+
+## Install the Package
+
+<CodeGroup>
+
+```bash npm
+npm install kt-testing-suite-core
+```
+
+```bash yarn
+yarn add kt-testing-suite-core
+```
+
+```bash pnpm
+pnpm add kt-testing-suite-core
+```
+
+</CodeGroup>
+
+If `kt-extendscript-builder` is not yet in your project, add it as a dev dependency at the same time:
+
+<CodeGroup>
+
+```bash npm
+npm install --save-dev kt-extendscript-builder
+```
+
+```bash yarn
+yarn add --dev kt-extendscript-builder
+```
+
+```bash pnpm
+pnpm add --save-dev kt-extendscript-builder
+```
+
+</CodeGroup>
+
+## Public API
+
+Everything exposed by `kt-testing-suite-core` is re-exported from a single entry point at `src/index.ts`. The table below lists all public exports and what they are used for.
+
+| Export | Kind | Purpose |
+|---|---|---|
+| `describe` | function | Defines a named test suite containing one or more `it` blocks. |
+| `it` | function | Defines a single test case inside a `describe` block. |
+| `expect` | function | Creates an assertion chain for the given value. |
+| `beforeEach` | function | Registers a callback to run before every test in the current suite. |
+| `afterEach` | function | Registers a callback to run after every test in the current suite. |
+| `beforeAll` | function | Registers a callback to run once before all tests in the current suite. |
+| `afterAll` | function | Registers a callback to run once after all tests in the current suite. |
+| `getSuites` | function | Returns all registered `Suite` objects (rarely called directly). |
+| `runTests` | function | Executes all registered suites through the specified (or default) reporter. |
+| `TestRunner` | class | Lower-level runner; instantiate directly if you need programmatic control over suite execution. |
+| `Expect` | class | The assertion class returned by `expect()`; extend or reference its type as needed. |
+| `createExpect` | function | Creates an `Expect` instance with a specific set of matchers attached. |
+| `extendMatchers` | function | Registers custom matcher objects and returns a typed `expect`-like function. |
+| `throwError` | function | Utility for throwing formatted errors from inside custom matchers. |
+| `ConsoleReporter` | class | Default reporter; writes human-readable output to the ExtendScript console. |
+| `JSONReporter` | class | Writes structured JSON output wrapped in `JSON_OUTPUT_START`/`JSON_OUTPUT_END` markers. |
+| `Matcher` | type | Interface that custom matcher objects must satisfy. |
+| `TestReporter` | type | Interface for implementing a custom reporter. |
+| `asAdobeType` | function | Safely casts `any` values to specific Adobe types, avoiding TypeScript strict-mode errors. |
+| `isAdobeType` | function | Type guard that checks whether a value is an instance of a given Adobe constructor. |
+
+## Configure `kt.config.json`
+
+`kt-extendscript-builder` reads a `kt.config.json` file in your project root. You need at least two named build targets — one for production (minified) and one for development (readable, with source symbols intact). The configuration below is taken directly from the library's own `kt.config.json`:
+
+```json
+{
+  "build-tests": {
+    "input": "src/tests/index.test.ts",
+    "output": "dist.test/index.test.js",
+    "watch": false,
+    "uglify": true,
+    "minify": true
+  },
+  "build-tests-debug": {
+    "input": "src/tests/index.test.ts",
+    "output": "dist.test/index.test.js",
+    "watch": false,
+    "uglify": false
+  }
+}
+```
+
+| Field | Description |
+|---|---|
+| `input` | Entry TypeScript file. This file should import all your test modules and call `runTests()` as its final statement. |
+| `output` | Path to the compiled ExtendScript bundle that the Adobe debugger will execute. |
+| `watch` | Set to `true` to rebuild automatically when source files change. Not commonly needed for tests. |
+| `uglify` | When `true`, variable names are mangled. Disable for the debug build to keep stack traces readable. |
+| `minify` | When `true`, whitespace is removed for a smaller file size. Disable for the debug build. |
+
+## Add Build Scripts to `package.json`
+
+Wire up the two `kt.config.json` targets as npm scripts so they are easy to invoke:
+
+```json
+{
+  "scripts": {
+    "build-tests": "kt-build build-tests",
+    "build-tests-debug": "kt-build build-tests-debug"
+  }
+}
+```
+
+## Build Output Location
+
+Both `build-tests` and `build-tests-debug` write their output to the same path:
+
+```
+dist.test/index.test.js
+```
+
+Point the ExtendScript Debugger at this file when running tests in your Adobe host application. Because both targets share the same output path, you never need to change the debugger configuration — just swap which npm script you run.
+
+<Tip>
+  Use `npm run build-tests-debug` during active development. The unminified
+  output preserves original symbol names, so error messages from failed
+  assertions reference recognisable variable and function names. Switch to
+  `npm run build-tests` (minified + uglified) only when you want to distribute
+  or commit a lean final bundle — it is not required for day-to-day test work.
+</Tip>
+
+## Verifying the Installation
+
+After running `npm run build-tests-debug` for the first time, confirm that `dist.test/index.test.js` was created. If the file is present, the build pipeline is working correctly and you are ready to execute tests inside your Adobe host application.
+
+<Warning>
+  The compiled output file is a plain JavaScript/ExtendScript file. Do not
+  attempt to run it with `node` or in a browser — it relies on Adobe host APIs
+  such as `app`, `CompItem`, and `$.writeln` that only exist inside an Adobe
+  application runtime.
+</Warning>

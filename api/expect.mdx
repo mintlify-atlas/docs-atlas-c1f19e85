@@ -1,0 +1,278 @@
+---
+title: "expect(), Expect Class, and Matcher Interface API"
+sidebarTitle: "expect"
+description: "API reference for the expect() function, Expect<T> base class, Matcher<T> interface, createExpect(), extendMatchers(), and throwError()."
+---
+
+The assertion layer in KT Testing Suite Core is built around three cooperating pieces: the `Expect<T>` base class that holds the actual value and controls inversion, the `Matcher<T>` interface that describes any object whose methods can run assertions, and the `expect()` / `createExpect()` factory functions that wire them together. When you call `expect(value)` you receive an instance that carries both the base class methods and every built-in matcher so you can chain checks fluently.
+
+---
+
+## Type Definitions
+
+<Expandable title="Matcher&lt;T&gt; interface">
+  ```typescript
+  interface Matcher<T> {
+      [key: string]: (expected?: any, ...args: any[]) => Matcher<T>;
+  }
+  ```
+  An open-ended index signature where every property is a matcher function. Each function receives an optional expected value plus any additional arguments, performs its assertion (via `assert`), and returns the same `Matcher<T>` so calls can be chained. Any plain object conforming to this shape is a valid matcher group that can be passed to `createExpect`.
+</Expandable>
+
+---
+
+## expect()
+
+```typescript
+function expect<T>(actual: T): Expect<T> & Matcher<T>
+```
+
+Creates a fully equipped assertion instance for `actual`. The returned object merges the `Expect<T>` base class with both the built-in JavaScript matchers (`jsMatchers`) and the file-system matchers (`IOMatchers`), giving you the complete set of assertions available out of the box.
+
+<ParamField path="actual" type="T" required>
+  The value you want to make assertions about. Any type is accepted; individual matchers will validate the type internally and produce a descriptive error message if the type is inappropriate.
+</ParamField>
+
+### Return value
+
+<ResponseField name="" type="Expect<T> & Matcher<T>">
+  An instance that exposes all `Expect<T>` methods (`not()`, `assert()`, etc.) plus every matcher registered on `jsMatchers` and `IOMatchers`.
+</ResponseField>
+
+### Built-in jsMatchers
+
+| Matcher | Signature | Description |
+|---|---|---|
+| `toBe` | `(expected: any)` | Strict equality (`===`) |
+| `toEqual` | `(expected: object)` | Deep equality via `JSON.stringify` |
+| `toBeDefined` | `()` | Value is not `undefined` |
+| `toBeUndefined` | `()` | Value is `undefined` |
+| `toBeNull` | `()` | Value is `null` |
+| `toBeTrue` | `()` | Strictly `true` |
+| `toBeFalse` | `()` | Strictly `false` |
+| `toBeTruthy` | `()` | Truthy (`!!value`) |
+| `toBeFalsy` | `()` | Falsy (`!value`) |
+| `toBeArray` | `()` | Constructor is `Array` |
+| `toBeEmpty` | `()` | Array or string with `.length === 0` |
+| `toHaveLength` | `(expected: number)` | Array or string `.length` equals expected |
+| `toBeNumber` | `()` | `typeof === 'number'` and not `NaN` |
+| `toBeCloseTo` | `(expected: number, precision?: number)` | Numeric proximity within `10^-precision` (default 6) |
+| `toBeNaN` | `()` | Value is `NaN` |
+| `toBeString` | `()` | `typeof === 'string'` |
+| `toBeBoolean` | `()` | `typeof === 'boolean'` |
+| `toBeFunction` | `()` | `typeof === 'function'` |
+| `toBeGreaterThan` | `(expected: number)` | Numeric `>` |
+| `toBeLessThan` | `(expected: number)` | Numeric `<` |
+| `toBeGreaterThanOrEqual` | `(expected: number)` | Numeric `>=` |
+| `toBeLessThanOrEqual` | `(expected: number)` | Numeric `<=` |
+| `toContain` | `(expected: string)` | String contains substring |
+| `toInclude` | `(expected: any)` | Array contains element (strict equality) |
+| `toHaveProperty` | `(expected: string, value?: any)` | Object has own property, optionally with a specific value |
+| `toBeInstanceOf` | `(expected: Function)` | Constructor or `instanceof` check |
+| `toThrow` | `()` | Function throws when called |
+| `toPassAny` | `(conditions: Array<string \| Record<string, any>>)` | Passes if any of the listed matcher conditions holds |
+
+### Built-in IOMatchers
+
+| Matcher | Description |
+|---|---|
+| `toBeFile()` | Value is an ExtendScript `File` instance |
+| `toBeFolder()` | Value is an ExtendScript `Folder` instance |
+| `toBeFileOrFolder()` | Value is either a `File` or a `Folder` |
+| `fileExists()` | Value is a `File` instance whose `.exists` property is `true` |
+
+### Example
+
+```typescript
+import { expect } from 'kt-testing-suite-core';
+
+// Primitive assertions
+expect(42).toBeNumber();
+expect('hello').toContain('ell');
+expect([1, 2, 3]).toHaveLength(3);
+
+// Negation
+expect(null).not().toBeDefined();
+
+// File system (ExtendScript)
+const f = new File('/tmp/output.txt');
+expect(f).toBeFile();
+```
+
+---
+
+## Expect\<T\> class
+
+```typescript
+class Expect<T> {
+    protected actual: T;
+    protected inverted: boolean;
+
+    constructor(actual: T, inverted?: boolean)
+    not(): Expect<T> & Matcher<T>
+    protected assert(condition: boolean, message: string): void
+    protected toSafeString(value: any): string
+    protected getSafeActual(type: 'array' | 'string' | 'number' | 'any'): any
+}
+```
+
+`Expect<T>` is the base class that all assertion instances inherit from. It is rarely instantiated directly; use `expect()` or `createExpect()` instead. Custom matcher functions receive `this` bound to the `Expect` instance, so they have full access to `assert`, `toSafeString`, and `getSafeActual`.
+
+### constructor()
+
+<ParamField path="actual" type="T" required>
+  The value under test. Stored as the protected `actual` property and accessible to all matcher methods via `this.actual`.
+</ParamField>
+
+<ParamField path="inverted" type="boolean">
+  When `true`, the logic of `assert()` is flipped so that a condition that would normally pass now fails and vice versa. Defaults to `false`. Toggle with `not()`.
+</ParamField>
+
+### not()
+
+```typescript
+not(): Expect<T> & Matcher<T>
+```
+
+Flips the `inverted` flag on the current instance and returns it. Subsequent matcher calls will fail if the condition is true (and pass if it is false).
+
+<Note>
+  `not()` mutates the current instance rather than creating a new one. Chaining `.not().not()` returns the instance to its original non-inverted state.
+</Note>
+
+```typescript
+expect(1).not().toBe(2);          // passes
+expect('abc').not().toBeEmpty();  // passes
+expect(5).not().toBeGreaterThan(10); // passes
+```
+
+### assert() (protected)
+
+```typescript
+protected assert(condition: boolean, message: string): void
+```
+
+Core assertion primitive used by every matcher. When `inverted` is `false`, throws if `condition` is `false`. When `inverted` is `true`, throws if `condition` is `true`.
+
+<ParamField path="condition" type="boolean" required>
+  The boolean result of the matcher's check. Pass the expression that should be `true` for the assertion to succeed in normal (non-inverted) mode.
+</ParamField>
+
+<ParamField path="message" type="string" required>
+  The error message emitted when the assertion fails. Should describe what was expected and what was actually received.
+</ParamField>
+
+### toSafeString() (protected)
+
+```typescript
+protected toSafeString(value: any): string
+```
+
+Converts a value to a string safe for embedding in error messages. Returns `'null'` for `null`, `'undefined'` for `undefined`, and `value.toString()` for everything else.
+
+<ParamField path="value" type="any" required>
+  The value to convert.
+</ParamField>
+
+### getSafeActual() (protected)
+
+```typescript
+protected getSafeActual(type: 'array' | 'string' | 'number' | 'any'): any
+```
+
+Returns `this.actual` coerced to the requested type, or a safe default if the actual value is incompatible. Protects matchers from throwing unexpected errors when operating on `null` or `undefined`.
+
+<ParamField path="type" type="'array' | 'string' | 'number' | 'any'" required>
+  The expected type. Returns `[]` for `'array'`, `''` for `'string'`, and `NaN` for `'number'` when the actual value is `null`, `undefined`, or of the wrong type. `'any'` returns the value as-is.
+</ParamField>
+
+---
+
+## createExpect()
+
+```typescript
+function createExpect<T>(
+    actual: T,
+    matchers?: Matcher<T>[]
+): Expect<T> & Matcher<T>
+```
+
+Factory function that creates an `Expect<T>` instance and mixes in one or more matcher objects. `jsMatchers` is **always prepended** to the provided list, so the built-in JavaScript matchers are always available. Use this when you need a custom subset of matchers without the `IOMatchers` (e.g., in a utility context where `File` and `Folder` are not available).
+
+<ParamField path="actual" type="T" required>
+  The value to assert against.
+</ParamField>
+
+<ParamField path="matchers" type="Matcher<T>[]">
+  An array of matcher objects to mix into the instance. `jsMatchers` is always prepended. If omitted or empty, only `jsMatchers` are applied. Each object's own enumerable keys are copied directly onto the instance.
+</ParamField>
+
+### Example
+
+```typescript
+import { createExpect } from 'kt-testing-suite-core';
+
+// Only jsMatchers (no IO matchers)
+const e = createExpect(42);
+e.toBe(42);
+
+// With a custom matcher group
+const colorMatchers = {
+    toBeHex: function () {
+        this.assert(
+            /^#[0-9a-fA-F]{6}$/.test(this.actual),
+            'Expected ' + this.toSafeString(this.actual) + ' to be a hex color'
+        );
+        return this;
+    }
+};
+
+const ce = createExpect('#ff0000', [colorMatchers]);
+ce.toBeHex();
+ce.toBe('#ff0000'); // jsMatchers still available
+```
+
+---
+
+## extendMatchers()
+
+```typescript
+const extendMatchers: typeof createExpect;
+```
+
+A re-exported alias for `createExpect`. The two names are interchangeable; `extendMatchers` is provided as a more descriptive name when the intent is to add custom matchers to an assertion.
+
+```typescript
+import { extendMatchers } from 'kt-testing-suite-core';
+
+const e = extendMatchers('hello', [myCustomMatchers]);
+e.myCustomMatcher();
+```
+
+---
+
+## throwError()
+
+```typescript
+function throwError(message: string): never
+```
+
+A utility that throws a formatted `Error` with the given message. Primarily used by matcher implementations to report failures in a consistent way. The `TestRunner` catches all errors thrown during test execution and records them as failures.
+
+<ParamField path="message" type="string" required>
+  The error message. Should be descriptive enough to identify exactly what assertion failed and why.
+</ParamField>
+
+<Warning>
+  `throwError` always throws. Its return type is `never`, which means TypeScript understands that code after a call to `throwError` is unreachable.
+</Warning>
+
+```typescript
+import { throwError } from 'kt-testing-suite-core';
+
+function assertPositive(n: number): void {
+    if (n <= 0) {
+        throwError('Expected a positive number but got ' + n);
+    }
+}
+```

@@ -1,0 +1,220 @@
+---
+title: "describe(), it(), and getSuites() API Reference"
+sidebarTitle: "describe / it"
+description: "API reference for describe(), it(), and getSuites(). Defines test suites, registers test cases, and retrieves all registered suites for the runner."
+---
+
+The three functions `describe`, `it`, and `getSuites` form the structural backbone of every test file. `describe` organises related tests under a named block, `it` registers an individual test case within that block, and `getSuites` retrieves the global list of all root suites so the runner can execute them. Suites are stored in a module-level array and persist for the lifetime of the script—calling `describe` multiple times simply appends to that list.
+
+---
+
+## Type Definitions
+
+Before diving into the functions, it helps to understand the core types they operate on.
+
+<Expandable title="TestFn">
+  ```typescript
+  interface TestFn {
+      (): void;
+  }
+  ```
+  A zero-argument function that executes a test or hook. It must return `void`; any assertion failure is communicated by throwing an `Error`.
+</Expandable>
+
+<Expandable title="Test">
+  ```typescript
+  interface Test {
+      name: string;
+      fn: TestFn;
+  }
+  ```
+
+  <ResponseField name="name" type="string" required>
+    The human-readable label for this test case, as passed to `it()`.
+  </ResponseField>
+  <ResponseField name="fn" type="TestFn" required>
+    The function that contains the test body and assertions.
+  </ResponseField>
+</Expandable>
+
+<Expandable title="Suite">
+  ```typescript
+  interface Suite {
+      description: string;
+      tests: Test[];
+      children?: Suite[];
+      parent?: Suite;
+      beforeEach?: TestFn;
+      afterEach?: TestFn;
+      beforeAll?: TestFn;
+      afterAll?: TestFn;
+  }
+  ```
+
+  <ResponseField name="description" type="string" required>
+    The label for this suite block, as passed to `describe()`.
+  </ResponseField>
+  <ResponseField name="tests" type="Test[]" required>
+    All test cases registered directly inside this `describe` block via `it()`.
+  </ResponseField>
+  <ResponseField name="children" type="Suite[]">
+    Nested `describe` blocks declared inside this suite. Populated automatically when a nested `describe` call is made while this suite is active.
+  </ResponseField>
+  <ResponseField name="parent" type="Suite">
+    Reference to the enclosing `Suite`, or `undefined` for root suites.
+  </ResponseField>
+  <ResponseField name="beforeEach" type="TestFn">
+    Hook registered via `beforeEach()`. Runs before every test in this suite (and is inherited by child suites).
+  </ResponseField>
+  <ResponseField name="afterEach" type="TestFn">
+    Hook registered via `afterEach()`. Runs after every test in this suite (and is inherited by child suites).
+  </ResponseField>
+  <ResponseField name="beforeAll" type="TestFn">
+    Hook registered via `beforeAll()`. Runs once before all tests in this specific suite.
+  </ResponseField>
+  <ResponseField name="afterAll" type="TestFn">
+    Hook registered via `afterAll()`. Runs once after all tests in this specific suite.
+  </ResponseField>
+</Expandable>
+
+---
+
+## describe()
+
+```typescript
+function describe(description: string, fn: () => void): void
+```
+
+Creates a new test suite and immediately invokes its factory function `fn`. Any `it()`, `beforeEach()`, `afterEach()`, `beforeAll()`, or `afterAll()` calls made during the synchronous execution of `fn` are registered on that suite. Nested `describe` calls are supported and produce child suites linked via the `parent` / `children` references on `Suite`.
+
+Only root-level suites (those not nested inside another `describe`) are pushed into the global suites array that `getSuites()` returns. Child suites are reachable through the root's `children` tree.
+
+<ParamField path="description" type="string" required>
+  A human-readable label for the test suite. Appears in reporter output and is concatenated with child suite descriptions to build the full test name used for filtering.
+</ParamField>
+
+<ParamField path="fn" type="() => void" required>
+  A synchronous callback in which you register tests and hooks. The function is called immediately and must not be async.
+</ParamField>
+
+### Example
+
+```typescript
+import { describe, it, expect } from 'kt-testing-suite-core';
+
+describe('Array utilities', () => {
+    it('returns the correct length', () => {
+        expect([1, 2, 3]).toHaveLength(3);
+    });
+
+    it('identifies an array', () => {
+        expect([]).toBeArray();
+    });
+});
+```
+
+### Nesting describe blocks
+
+```typescript
+describe('Math', () => {
+    describe('addition', () => {
+        it('adds two positive numbers', () => {
+            expect(1 + 2).toBe(3);
+        });
+    });
+
+    describe('subtraction', () => {
+        it('subtracts correctly', () => {
+            expect(5 - 3).toBe(2);
+        });
+    });
+});
+```
+
+<Note>
+  The `fn` callback is executed **synchronously** at the point `describe` is called. All suite registration happens at script parse time, before the runner is invoked.
+</Note>
+
+---
+
+## it()
+
+```typescript
+function it(name: string, fn: TestFn): void
+```
+
+Registers a single test case on the currently active suite. The test is not executed immediately—it is stored on the suite's `tests` array and run later by the `TestRunner`.
+
+<ParamField path="name" type="string" required>
+  The label for this test case. Combined with all ancestor suite descriptions (space-separated) to form the full test name that appears in reporter output and is matched against the runner's filter string.
+</ParamField>
+
+<ParamField path="fn" type="TestFn" required>
+  The synchronous function that contains assertions. If this function throws any error the test is marked as failed; if it returns normally the test is marked as passed.
+</ParamField>
+
+<Warning>
+  `it()` **must** be called inside a `describe()` block. Calling it at the top level of a script will throw:
+  ```
+  Error: it() must be called inside a describe()
+  ```
+</Warning>
+
+### Example
+
+```typescript
+describe('String checks', () => {
+    it('detects a string type', () => {
+        expect('hello').toBeString();
+    });
+
+    it('checks string content', () => {
+        expect('hello world').toContain('world');
+    });
+});
+```
+
+---
+
+## getSuites()
+
+```typescript
+function getSuites(): Suite[]
+```
+
+Returns the array of all root `Suite` objects registered so far. This is the same array that `runTests()` uses by default when no explicit suite list is provided.
+
+<Note>
+  `getSuites()` returns a live reference to the internal array. Suites are appended each time a top-level `describe()` executes. Typically you call this once at the end of your test file, after all `describe` blocks have been defined.
+</Note>
+
+### Return Value
+
+<ResponseField name="" type="Suite[]">
+  An array of root `Suite` objects. Each suite may have nested child suites accessible via the `children` property. The array is ordered by registration time (first `describe` first).
+</ResponseField>
+
+### Example
+
+```typescript
+import { describe, it, getSuites, runTests } from 'kt-testing-suite-core';
+
+describe('Feature A', () => {
+    it('works', () => { /* ... */ });
+});
+
+describe('Feature B', () => {
+    it('also works', () => { /* ... */ });
+});
+
+// Retrieve and inspect before running
+const suites = getSuites();
+$.writeln('Registered suites: ' + suites.length); // 2
+
+// Pass to runner explicitly
+runTests(suites);
+```
+
+<Tip>
+  You can also call `runTests()` with no arguments and it will call `getSuites()` internally. Passing `getSuites()` explicitly is useful when you want to filter or inspect the suite list before running.
+</Tip>

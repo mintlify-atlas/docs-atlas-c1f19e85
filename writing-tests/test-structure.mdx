@@ -1,0 +1,174 @@
+---
+title: "Structuring Tests with describe and it"
+sidebarTitle: "Test Structure"
+description: "Organize test cases into suites with describe() and define individual tests with it(). Supports nested suites for hierarchical test organization."
+---
+
+KT Testing Suite Core follows the familiar Jest/Mocha pattern of grouping related tests into named suites using `describe()`, and defining individual test cases with `it()`. This structure keeps your test output readable and lets you share setup logic across related assertions — a natural fit for ExtendScript environments where each test file is compiled and run as a standalone script.
+
+## The Suite Object
+
+When you call `describe()`, the library creates a `Suite` object internally and registers it in a module-level array. Understanding this object helps you reason about how the runner traverses your tests.
+
+| Property      | Type      | Description                                                    |
+| ------------- | --------- | -------------------------------------------------------------- |
+| `description` | `string`  | The human-readable label for this suite, shown in output.      |
+| `tests`       | `Test[]`  | All `it()` cases registered directly inside this `describe`.   |
+| `children`    | `Suite[]` | Nested `describe` blocks declared inside this suite.           |
+| `parent`      | `Suite`   | Reference to the enclosing suite, or `undefined` for root suites. |
+
+Root-level suites (those not nested inside another `describe`) are pushed into the top-level `suites` array and returned by `getSuites()`. Nested suites are attached to their parent's `children` array instead, so the runner can walk the full tree in declaration order.
+
+## Defining a Suite with `describe()`
+
+`describe()` takes a string description and a callback. Every `it()` call and hook registration inside that callback belongs to the suite.
+
+```typescript
+import { describe, it, expect } from 'kt-testing-suite-core';
+
+describe('Math operations', () => {
+  it('should add numbers', () => {
+    expect(1 + 1).toBe(2);
+  });
+
+  it('should multiply numbers', () => {
+    expect(3 * 4).toBe(12);
+  });
+});
+```
+
+<Note>
+  `it()` **must** be called inside a `describe()` callback. Calling it at module scope throws:
+  `Error: it() must be called inside a describe()`
+</Note>
+
+## Defining Test Cases with `it()`
+
+`it()` registers a single test case in the current suite. It accepts a name and a `TestFn` — a zero-argument function that runs assertions. If the function throws, the test is marked failed; if it returns normally, the test passes.
+
+```typescript
+it('should check if values are equal', () => {
+  expect(10).toBe(10);
+});
+```
+
+The `name` string becomes the second segment of the full test name that the runner uses for filtering. For example, a test named `'should add numbers'` inside `describe('Math operations')` has the full name `"Math operations should add numbers"`.
+
+## Nesting `describe()` Blocks
+
+You can nest `describe()` calls arbitrarily deep to model the hierarchy of the system under test. The runner processes child suites after all the direct `tests` of their parent suite, and it builds a running `currentDescription` path by joining parent and child descriptions with a space.
+
+```typescript
+describe('String utilities', () => {
+  describe('trimming', () => {
+    it('should remove leading whitespace', () => {
+      expect('  hello'.replace(/^\s+/, '')).toBe('hello');
+    });
+
+    it('should remove trailing whitespace', () => {
+      expect('hello  '.replace(/\s+$/, '')).toBe('hello');
+    });
+  });
+
+  describe('casing', () => {
+    it('should uppercase a string', () => {
+      expect('hello'.toUpperCase()).toBe('HELLO');
+    });
+  });
+});
+```
+
+<Tip>
+  Nest suites to mirror the module or feature structure of your codebase. Shallow hierarchies (two levels) are usually enough — each level adds a prefix to every test name in the filter and output.
+</Tip>
+
+## A Complete Test File
+
+A real test file imports the API, declares one or more `describe` blocks, and that's it. The call to `runTests()` lives in the entry file, not in individual test files.
+
+```typescript
+// src/tests/math.test.ts
+import { describe, it, expect } from 'kt-testing-suite-core';
+
+describe('Addition', () => {
+  it('should add two positive integers', () => {
+    expect(1 + 2).toBe(3);
+  });
+
+  it('should add a positive and a negative integer', () => {
+    expect(5 + -3).toBe(2);
+  });
+
+  describe('edge cases', () => {
+    it('should return 0 when adding zero to zero', () => {
+      expect(0 + 0).toBe(0);
+    });
+
+    it('should handle large numbers', () => {
+      expect(100000 + 200000).toBe(300000);
+    });
+  });
+});
+
+describe('Subtraction', () => {
+  it('should subtract two numbers', () => {
+    expect(10 - 4).toBe(6);
+  });
+});
+```
+
+## The Test Entry File Pattern
+
+Because ExtendScript bundles all source into a single file at compile time, test suites are registered as a side-effect of importing their module. The entry file simply imports every test module (so their `describe()` calls run and register suites) and then calls `runTests()` once to execute them all.
+
+```typescript
+// src/tests/index.test.ts
+import { runTests } from 'kt-testing-suite-core';
+
+import './math.test';
+import './stringUtils.test';
+import './fileIO.test';
+
+runTests();
+```
+
+<Steps>
+  <Step title="Import all test modules">
+    Each import executes the module's top-level code, which calls `describe()` and populates the internal `suites` array.
+  </Step>
+  <Step title="Call runTests()">
+    `runTests()` calls `getSuites()` internally to retrieve every registered suite, then runs them in registration order using a `TestRunner`.
+  </Step>
+</Steps>
+
+## Retrieving Registered Suites with `getSuites()`
+
+If you need the suite list yourself — for example to pass it to a custom `TestRunner` — call `getSuites()` after all test modules have been imported.
+
+```typescript
+import { getSuites, TestRunner, ConsoleReporter } from 'kt-testing-suite-core';
+
+import './math.test';
+import './stringUtils.test';
+
+const suites = getSuites();
+const runner = new TestRunner(new ConsoleReporter());
+runner.run(suites);
+```
+
+`getSuites()` returns only the root-level suites. The runner recursively walks each suite's `children` array, so nested suites are reached automatically — you never need to flatten the tree yourself.
+
+<CardGroup cols={2}>
+  <Card title="describe()" icon="layer-group">
+    Creates a named test suite. Nested calls attach child suites to the parent's `children` array.
+  </Card>
+  <Card title="it()" icon="flask">
+    Registers a single test case in the current suite. Throws if called outside a `describe()`.
+  </Card>
+  <Card title="getSuites()" icon="list">
+    Returns all root-level registered suites. Call it after importing all test modules.
+  </Card>
+  <Card title="runTests()" icon="play">
+    Convenience wrapper that calls `getSuites()` and runs everything through a `TestRunner`.
+  </Card>
+</CardGroup>

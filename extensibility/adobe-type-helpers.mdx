@@ -1,0 +1,197 @@
+---
+title: "Adobe Type Helpers: asAdobeType and isAdobeType"
+sidebarTitle: "Adobe Type Helpers"
+description: "Use asAdobeType<T>() and isAdobeType() to write type-safe custom matchers for Adobe objects like AVLayer, CompItem, FootageSource, and more."
+---
+
+When writing custom matchers for Adobe applications—After Effects, Premiere Pro, Illustrator—you will quickly run into a TypeScript friction point. The `Matcher<any>` interface types `this.actual` as `any`, and inside a matcher function TypeScript cannot infer that `any` is actually an `AVLayer`. The moment you access a property like `layer.source.mainSource`, the compiler either raises a type error or offers no IntelliSense at all. KT Testing Suite ships two small but precise utilities—`asAdobeType<T>` and `isAdobeType`—to resolve this cleanly, without reaching for unsafe double casts or scattering `// @ts-ignore` comments through your matchers.
+
+Both helpers are exported from the top-level `kt-testing-suite-core` package alongside `extendMatchers`, `expect`, and the rest of the public API.
+
+```typescript
+import { asAdobeType, isAdobeType } from 'kt-testing-suite-core';
+```
+
+## `asAdobeType<T>(value: any): T`
+
+`asAdobeType` is a compile-time type assertion. It casts any value through `unknown` to `T`, which is the TypeScript-approved way to perform a forced cast without a direct `any → T` assignment error:
+
+```typescript
+export function asAdobeType<T>(value: any): T {
+    return value as unknown as T;
+}
+```
+
+The cast through `unknown` satisfies the TypeScript compiler's strict checks while producing zero additional JavaScript at runtime—the compiled output is identical to just using the raw value. Its purpose is entirely to unlock the type information you need in your editor: IntelliSense, property access, and refactoring support all flow from the return type `T`.
+
+**When to use it:** Any time you *know* that `this.actual` is an Adobe type and you want to access its properties without compiler errors or manual casts scattered through your code.
+
+```typescript
+const customMatchers: Matcher<any> = {
+    toBeFootageLayer: function () {
+        // Cast this.actual to AVLayer — no TypeScript error, full IntelliSense
+        const layer = asAdobeType<AVLayer>(this.actual);
+
+        expect(layer).toBeInstanceOf(AVLayer);
+        expect(layer.source.mainSource).toBeInstanceOf(FootageSource);
+        return this;
+    }
+};
+```
+
+## `isAdobeType<T>(value: any, constructor): value is T`
+
+`isAdobeType` is a runtime type guard. It wraps `instanceof` and returns a TypeScript type predicate (`value is T`), which means the compiler narrows the type of `value` to `T` inside any `if` block that checks the guard:
+
+```typescript
+export function isAdobeType<T>(
+    value: any,
+    constructor: new (...args: any[]) => T
+): value is T {
+    return value instanceof constructor;
+}
+```
+
+Unlike `asAdobeType`, this check actually executes at runtime in the Adobe host. Use it when you cannot guarantee what `this.actual` contains and want a graceful failure path instead of a hard crash.
+
+**When to use it:** When a matcher should handle both matching and non-matching types gracefully, or when you want to emit a descriptive failure message rather than an opaque Adobe runtime error.
+
+```typescript
+const customMatchers: Matcher<any> = {
+    toBeValidLayer: function () {
+        // Runtime guard: if it is not an AVLayer, fail with a clear message
+        if (!isAdobeType(this.actual, AVLayer)) {
+            this.assert(
+                false,
+                `Expected an AVLayer but got ${this.toSafeString(this.actual)}`
+            );
+            return this;
+        }
+
+        // Inside this block TypeScript knows this.actual is AVLayer
+        const layer = asAdobeType<AVLayer>(this.actual);
+        expect(layer.source).toBeDefined();
+        return this;
+    }
+};
+```
+
+## Combining Both Helpers
+
+The two utilities work well together: use `isAdobeType` to guard the early-exit path, then `asAdobeType` to get the typed variable you will actually work with. The `isAdobeType` guard narrows TypeScript's view of `this.actual`, but `this.actual` is still typed as `any` in the `Matcher<any>` context, so `asAdobeType` provides the clean typed binding for the rest of the matcher body.
+
+```typescript
+const customMatchers: Matcher<any> = {
+    toHaveValidSource: function () {
+        if (!isAdobeType(this.actual, AVLayer)) {
+            this.assert(false, 'Expected an AVLayer for source validation');
+            return this;
+        }
+
+        const layer = asAdobeType<AVLayer>(this.actual);
+        expect(layer.source).not().toBeNull();
+        expect(layer.source.mainSource).toBeDefined();
+        return this;
+    }
+};
+```
+
+## Complete Adobe Matchers Example
+
+The following example assembles several matchers for After Effects layer types into a single exported `Matcher<any>` object that can be passed to `extendMatchers`. It is adapted from the extensibility documentation for the suite.
+
+```typescript
+import { Matcher, extendMatchers, Expect } from 'kt-testing-suite-core';
+import { asAdobeType, isAdobeType } from 'kt-testing-suite-core';
+
+export const adobeMatchers: Matcher<any> = {
+    toBeFootageLayer: function () {
+        const layer = asAdobeType<AVLayer>(this.actual);
+        expect(layer).toBeInstanceOf(AVLayer);
+        expect(layer.source.mainSource).toBeInstanceOf(FootageSource);
+        return this;
+    },
+
+    toBeTextLayer: function () {
+        const layer = asAdobeType<TextLayer>(this.actual);
+        expect(layer).toBeInstanceOf(TextLayer);
+        expect(layer.text).toBeDefined();
+        return this;
+    },
+
+    toHaveValidSource: function () {
+        if (!isAdobeType(this.actual, AVLayer)) {
+            this.assert(false, 'Expected AVLayer for source validation');
+            return this;
+        }
+
+        const layer = asAdobeType<AVLayer>(this.actual);
+        expect(layer.source).not().toBeNull();
+        expect(layer.source.exists).toBe(true);
+        return this;
+    },
+
+    toBeSolidLayer: function () {
+        const layer = asAdobeType<AVLayer>(this.actual);
+        expect(layer).toBeInstanceOf(AVLayer);
+        expect(layer.source.mainSource).toBeInstanceOf(SolidSource);
+        return this;
+    }
+};
+
+// Wire it into a namespace-scoped expect
+namespace AEMatchers {
+    export function expect<T>(actual: T): Expect<T> & Matcher<T> {
+        return extendMatchers(actual, [adobeMatchers]);
+    }
+}
+```
+
+### Using Adobe Matchers in Tests
+
+```typescript
+describe('After Effects Layer Tests', () => {
+    it('should identify footage layers correctly', () => {
+        const comp = app.project.items.addComp('Test', 1920, 1080, 1, 10, 30);
+        const footage = app.project.importFile(new ImportOptions());
+        const layer = comp.layers.add(footage);
+
+        AEMatchers.expect(layer).toBeFootageLayer();
+
+        comp.remove();
+    });
+
+    it('should validate layer sources', () => {
+        const comp = app.project.items.addComp('Test', 1920, 1080, 1, 10, 30);
+        const solidLayer = comp.layers.addSolid(
+            [1, 0, 0],
+            'Red Solid',
+            1920,
+            1080,
+            1
+        );
+
+        AEMatchers.expect(solidLayer).toHaveValidSource();
+
+        comp.remove();
+    });
+});
+```
+
+## Benefits at a Glance
+
+| Benefit | Detail |
+|---|---|
+| **Type safety** | Eliminates TypeScript compilation errors when accessing Adobe-specific properties inside `Matcher<any>` methods |
+| **IntelliSense** | Full autocomplete for Adobe API properties once `asAdobeType<T>` is called |
+| **Runtime safety** | `isAdobeType` guards prevent opaque Adobe runtime errors from untypeable objects |
+| **Reusability** | Works with any Adobe application that exposes ExtendScript types—After Effects, Premiere Pro, Illustrator, and more |
+| **Clean code** | A single `asAdobeType<AVLayer>(this.actual)` replaces repetitive `this.actual as unknown as AVLayer` patterns throughout a file |
+
+<Note>
+  Both `asAdobeType` and `isAdobeType` are thin wrappers with no dependencies. `asAdobeType` compiles to `return value;` with the cast erased, and `isAdobeType` compiles to `return value instanceof constructor;`. There is no runtime overhead beyond what you would write manually.
+</Note>
+
+<Warning>
+  `asAdobeType` performs no runtime check. If `this.actual` is genuinely not an `AVLayer` and you call `asAdobeType<AVLayer>(this.actual)`, ExtendScript will throw when you access a missing property. Use `isAdobeType` first whenever the type of the incoming value is not guaranteed by the test setup.
+</Warning>

@@ -1,0 +1,224 @@
+---
+title: "Numeric Comparison Matchers: toBeGreaterThan, toBeLessThan, toBeCloseTo"
+sidebarTitle: "Numeric"
+description: "Compare numeric values with toBeGreaterThan, toBeLessThan, toBeGreaterThanOrEqual, toBeLessThanOrEqual, and toBeCloseTo for floating-point assertions."
+---
+
+Numeric comparison matchers let you assert the relative size of values rather than exact equality. They are useful when testing computed results, thresholds, or any value that should fall within a certain range. All five matchers share the same guard logic: the actual value must be a genuine `number` type **and** must not be `NaN`, otherwise the assertion fails immediately regardless of the comparison operator.
+
+## `toBeGreaterThan(expected)`
+
+Asserts that the actual value is **strictly greater than** the expected value. Equal values do not pass.
+
+```typescript
+// ✅ Passes
+expect(5).toBeGreaterThan(3);
+expect(0).toBeGreaterThan(-1);
+
+// ❌ Throws — equal values are not strictly greater
+expect(() => expect(5).toBeGreaterThan(5)).toThrow();
+
+// ❌ Throws — non-numeric actual values
+expect(() => expect('5').toBeGreaterThan(3)).toThrow();
+expect(() => expect(null).toBeGreaterThan(0)).toThrow();
+```
+
+**Signature:**
+
+```typescript
+toBeGreaterThan(expected: number): this
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `expected` | `number` | The value the actual must exceed. |
+
+## `toBeLessThan(expected)`
+
+Asserts that the actual value is **strictly less than** the expected value. Equal values do not pass.
+
+```typescript
+// ✅ Passes
+expect(3).toBeLessThan(5);
+expect(-1).toBeLessThan(0);
+
+// ❌ Throws — equal values are not strictly less
+expect(() => expect(5).toBeLessThan(5)).toThrow();
+
+// ❌ Throws — NaN inputs always fail
+expect(() => expect(NaN).toBeLessThan(5)).toThrow();
+```
+
+**Signature:**
+
+```typescript
+toBeLessThan(expected: number): this
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `expected` | `number` | The value the actual must be below. |
+
+## `toBeGreaterThanOrEqual(expected)`
+
+Asserts that the actual value is **greater than or equal to** the expected value. This is the non-strict counterpart to `toBeGreaterThan` — equal values pass.
+
+```typescript
+// ✅ Passes — both greater and equal cases
+expect(5).toBeGreaterThanOrEqual(3);
+expect(5).toBeGreaterThanOrEqual(5);
+
+// ❌ Throws — actual is less
+expect(() => expect(3).toBeGreaterThanOrEqual(5)).toThrow();
+```
+
+**Signature:**
+
+```typescript
+toBeGreaterThanOrEqual(expected: number): this
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `expected` | `number` | The value the actual must meet or exceed. |
+
+## `toBeLessThanOrEqual(expected)`
+
+Asserts that the actual value is **less than or equal to** the expected value. Equal values pass.
+
+```typescript
+// ✅ Passes — both less and equal cases
+expect(3).toBeLessThanOrEqual(5);
+expect(5).toBeLessThanOrEqual(5);
+
+// ❌ Throws — actual is greater
+expect(() => expect(10).toBeLessThanOrEqual(5)).toThrow();
+```
+
+**Signature:**
+
+```typescript
+toBeLessThanOrEqual(expected: number): this
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `expected` | `number` | The value the actual must not exceed. |
+
+## `toBeCloseTo(expected, precision?)`
+
+Asserts that the actual value is close to the expected value within a given precision. The condition evaluated is:
+
+```
+Math.abs(actual - expected) < Math.pow(10, -precision)
+```
+
+The default precision is `6`, which means the difference must be less than `0.000001`. This matcher exists specifically to handle floating-point arithmetic in ExtendScript, where operations like `0.1 + 0.2` do not produce exactly `0.3`.
+
+```typescript
+// ✅ Passes — default precision (6 decimal places)
+expect(0.1 + 0.2).toBeCloseTo(0.3);
+
+// ✅ Passes — custom precision of 2 decimal places
+expect(3.14159).toBeCloseTo(3.14, 2);
+
+// ✅ Passes — exact equality also satisfies closeness
+expect(1.0).toBeCloseTo(1.0);
+
+// ❌ Throws — difference exceeds default precision
+expect(() => expect(1.5).toBeCloseTo(1.0)).toThrow();
+```
+
+<Tip>
+  Use `toBeCloseTo` instead of `toBe` whenever you are asserting the result of floating-point arithmetic. Even simple additions like `0.1 + 0.2` produce `0.30000000000000004` in JavaScript, which will cause `toBe(0.3)` to fail.
+</Tip>
+
+**Signature:**
+
+```typescript
+toBeCloseTo(expected: number, precision?: number): this
+```
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `expected` | `number` | — | The value to compare against. |
+| `precision` | `number` | `6` | Number of decimal places to check. Lower values are more lenient. |
+
+## Equality edge cases
+
+The strict comparison matchers (`toBeGreaterThan`, `toBeLessThan`) fail when the actual and expected values are equal. The non-strict variants (`toBeGreaterThanOrEqual`, `toBeLessThanOrEqual`) pass. This distinction matters when validating boundary conditions:
+
+```typescript
+const threshold = 100;
+
+// Exactly at threshold
+expect(100).toBeGreaterThanOrEqual(threshold); // ✅ passes
+expect(100).toBeLessThanOrEqual(threshold);    // ✅ passes
+expect(() => expect(100).toBeGreaterThan(threshold)).toThrow(); // ❌
+expect(() => expect(100).toBeLessThan(threshold)).toThrow();    // ❌
+```
+
+## NaN and non-number inputs
+
+All numeric comparison matchers guard against `NaN` and non-number inputs by checking both `typeof value === 'number'` and `!isNaN(value)` before performing the comparison. If either check fails the assertion throws regardless of the expected value:
+
+```typescript
+// ❌ All throw — NaN is not a valid number for comparison
+expect(() => expect(NaN).toBeGreaterThan(0)).toThrow();
+expect(() => expect(NaN).toBeLessThan(0)).toThrow();
+expect(() => expect(NaN).toBeGreaterThanOrEqual(0)).toThrow();
+expect(() => expect(NaN).toBeLessThanOrEqual(0)).toThrow();
+
+// ❌ All throw — string '5' is not a number
+expect(() => expect('5').toBeGreaterThan(3)).toThrow();
+expect(() => expect(null).toBeGreaterThan(0)).toThrow();
+```
+
+## Full examples from the test suite
+
+<CodeGroup>
+
+```typescript Happy path
+it('toBeGreaterThan passes with greater values', () => {
+    expect(5).toBeGreaterThan(3);
+    expect(0).toBeGreaterThan(-1);
+});
+
+it('toBeLessThan passes with lesser values', () => {
+    expect(3).toBeLessThan(5);
+    expect(-1).toBeLessThan(0);
+});
+
+it('toBeGreaterThanOrEqual passes with greater or equal values', () => {
+    expect(5).toBeGreaterThanOrEqual(3);
+    expect(5).toBeGreaterThanOrEqual(5);
+});
+
+it('toBeLessThanOrEqual passes with lesser or equal values', () => {
+    expect(3).toBeLessThanOrEqual(5);
+    expect(5).toBeLessThanOrEqual(5);
+});
+```
+
+```typescript Equality edge cases
+it('toBeGreaterThan fails with equal values', () => {
+    expect(() => expect(5).toBeGreaterThan(5)).toThrow();
+});
+
+it('toBeLessThan fails with equal values', () => {
+    expect(() => expect(5).toBeLessThan(5)).toThrow();
+});
+```
+
+```typescript Sad path
+it('toBeGreaterThan fails with non-numbers', () => {
+    expect(() => expect('5').toBeGreaterThan(3)).toThrow();
+    expect(() => expect(null).toBeGreaterThan(0)).toThrow();
+});
+
+it('toBeLessThan handles NaN', () => {
+    expect(() => expect(NaN).toBeLessThan(5)).toThrow();
+});
+```
+
+</CodeGroup>

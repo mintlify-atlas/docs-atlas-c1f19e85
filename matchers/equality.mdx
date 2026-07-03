@@ -1,0 +1,145 @@
+---
+title: "Equality and Identity Matchers: toBe and toEqual"
+sidebarTitle: "Equality"
+description: "toBe checks strict identity (===) while toEqual performs deep JSON equality. Learn when to use each and see examples for primitives and objects."
+---
+
+KT Testing Suite Core provides two fundamental equality matchers: `toBe` for checking that two values are the exact same reference or primitive, and `toEqual` for comparing the serialised structure of objects and arrays. Understanding the difference between them is essential — choosing the wrong one is one of the most common sources of unexpected test failures.
+
+## `toBe(expected)`
+
+`toBe` asserts that the actual value is **strictly identical** to the expected value using the `===` operator. For primitives (`number`, `string`, `boolean`, `null`, `undefined`) this means same type and same value. For objects and arrays it means the **same reference in memory** — two separate objects with identical properties will not pass.
+
+```typescript
+// ✅ Passes — same primitive values
+expect(true).toBe(true);
+expect(1).toBe(1);
+expect('test').toBe('test');
+expect(null).toBe(null);
+expect(undefined).toBe(undefined);
+```
+
+```typescript
+// ❌ Throws — same shape, different reference
+expect({ a: 1 }).toBe({ a: 1 });
+
+// ❌ Throws — different types
+expect('1').toBe(1);
+
+// ❌ Throws — null !== undefined
+expect(null).toBe(undefined);
+```
+
+<Warning>
+  Two distinct object literals `{ a: 1 }` and `{ a: 1 }` are **not** identical — they are separate allocations in memory. Use `toEqual` whenever you need to compare objects or arrays by their contents rather than their reference.
+</Warning>
+
+**Signature:**
+
+```typescript
+toBe(expected: any): this
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `expected` | `any` | The value to compare against using `===`. |
+
+## `toEqual(expected)`
+
+`toEqual` asserts **deep structural equality** by serialising both values with `JSON.stringify` and comparing the resulting strings. This makes it ideal for comparing plain objects, nested objects, and arrays by content rather than reference.
+
+```typescript
+// ✅ Passes — same structure and values
+expect({ a: 1, b: 'test' }).toEqual({ a: 1, b: 'test' });
+expect([1, 2, 3]).toEqual([1, 2, 3]);
+expect({ a: { b: 2 } }).toEqual({ a: { b: 2 } });
+```
+
+```typescript
+// ❌ Throws — null and undefined serialise differently
+expect(null).toEqual(undefined);
+```
+
+<Note>
+  Because `toEqual` relies on `JSON.stringify`, values that are not JSON-serialisable — such as functions, `undefined` object properties, or circular references — may produce unexpected results. For those cases, assert individual properties with `toHaveProperty` instead.
+</Note>
+
+**Signature:**
+
+```typescript
+toEqual(expected: object): this
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `expected` | `object` | The value to compare against using deep JSON equality. |
+
+## When to use `toBe` vs `toEqual`
+
+| Use case | Recommended matcher |
+|---|---|
+| Comparing numbers, strings, booleans | `toBe` |
+| Checking `null` or `undefined` | `toBe` |
+| Comparing the same object reference | `toBe` |
+| Comparing two objects by their contents | `toEqual` |
+| Comparing two arrays by their elements | `toEqual` |
+| Comparing nested objects | `toEqual` |
+
+## Edge cases: `null` and `undefined`
+
+`null` and `undefined` are distinct values in ExtendScript. `toBe` correctly distinguishes them because `null === undefined` is `false`. `toEqual` also distinguishes them because `JSON.stringify(null)` returns `"null"` while `JSON.stringify(undefined)` returns `undefined` (which does not equal `"null"`).
+
+```typescript
+// ✅ Each value equals itself
+expect(null).toBe(null);
+expect(undefined).toBe(undefined);
+
+// ❌ null and undefined are never equal to each other
+expect(() => expect(null).toBe(undefined)).toThrow();
+expect(() => expect(null).toEqual(undefined)).toThrow();
+```
+
+## Full examples from the test suite
+
+The following examples are taken directly from `baseMatchers.test.ts` and show the happy path, grey path, and sad path for both matchers:
+
+<CodeGroup>
+
+```typescript Happy path
+it('toBe passes with identical values', () => {
+    expect(true).toBe(true);
+    expect(1).toBe(1);
+    expect('test').toBe('test');
+});
+
+it('toEqual passes with deep object equality', () => {
+    expect({ a: 1, b: 'test' }).toEqual({ a: 1, b: 'test' });
+    expect([1, 2, 3]).toEqual([1, 2, 3]);
+});
+
+it('toEqual passes with nested objects', () => {
+    expect({ a: { b: 2 } }).toEqual({ a: { b: 2 } });
+});
+```
+
+```typescript Edge cases
+it('toBe handles null and undefined', () => {
+    expect(null).toBe(null);
+    expect(undefined).toBe(undefined);
+    expect(() => expect(null).toBe(undefined)).toThrow();
+});
+
+it('toEqual handles null and undefined', () => {
+    expect(null).toEqual(null);
+    expect(() => expect(null).toEqual(undefined)).toThrow();
+});
+```
+
+```typescript Sad path
+it('toBe fails with similar but non-identical values', () => {
+    expect(() => expect('1').toBe(1)).toThrow();
+    expect(() => expect({ a: 1 }).toBe({ a: 1 })).toThrow();
+});
+```
+
+</CodeGroup>

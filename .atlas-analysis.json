@@ -1,0 +1,108 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "KT Testing Suite Core",
+  "projectDescription": "A Jest/Mocha-style testing framework for Adobe app extensions written in TypeScript/ExtendScript, providing matchers, lifecycle hooks, reporters, and extensibility APIs.",
+  "theme": "luma",
+  "primaryColor": "#22f48d",
+  "lightColor": "#55fb8b",
+  "darkColor": "#c9fcd1",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Writing Tests",
+            "pages": [
+              "writing-tests/test-structure",
+              "writing-tests/hooks",
+              "writing-tests/filtering"
+            ]
+          },
+          {
+            "group": "Matchers",
+            "pages": [
+              "matchers/overview",
+              "matchers/equality",
+              "matchers/type-checks",
+              "matchers/numeric",
+              "matchers/collections",
+              "matchers/io",
+              "matchers/negation"
+            ]
+          },
+          {
+            "group": "Extensibility",
+            "pages": [
+              "extensibility/custom-matchers",
+              "extensibility/namespaces",
+              "extensibility/adobe-type-helpers"
+            ]
+          },
+          {
+            "group": "Reporters",
+            "pages": [
+              "reporters/overview",
+              "reporters/custom-reporters"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core API",
+            "pages": [
+              "api/describe-it",
+              "api/expect",
+              "api/hooks",
+              "api/runner",
+              "api/reporters"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Jest/Mocha-style describe/it/expect API compatible with ExtendScript",
+    "30+ built-in matchers covering equality, types, numeric comparisons, arrays, strings, and Adobe IO types",
+    "Lifecycle hooks: beforeEach, afterEach, beforeAll, afterAll with nested suite support",
+    "Extensible matcher system via extendMatchers() and TypeScript namespaces",
+    "Built-in ConsoleReporter and JSONReporter with custom reporter interface",
+    "Test filtering by case-insensitive name substring via TestRunner",
+    "Adobe-specific IO matchers (toBeFile, toBeFolder, fileExists)",
+    "Adobe type helpers: asAdobeType<T>() and isAdobeType() type guards"
+  ],
+  "publicApiSurface": [
+    "describe(description: string, fn: () => void): void",
+    "it(name: string, fn: TestFn): void",
+    "expect<T>(actual: T): Expect<T> & Matcher<T>",
+    "beforeEach(fn: TestFn): void",
+    "afterEach(fn: TestFn): void",
+    "beforeAll(fn: TestFn): void",
+    "afterAll(fn: TestFn): void",
+    "getSuites(): Suite[]",
+    "runTests(suites?, reporter?, filter?): void",
+    "class TestRunner",
+    "class Expect<T>",
+    "createExpect<T>(actual: T, matchers?: Matcher<T>[]): Expect<T> & Matcher<T>",
+    "extendMatchers<T>(actual: T, matchers?: Matcher<T>[]): Expect<T> & Matcher<T>",
+    "throwError(message: string): never",
+    "class ConsoleReporter implements TestReporter",
+    "class JSONReporter implements TestReporter",
+    "interface TestReporter",
+    "interface Matcher<T>",
+    "asAdobeType<T>(value: any): T",
+    "isAdobeType<T>(value: any, constructor: new (...args) => T): value is T"
+  ]
+}

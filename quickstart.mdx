@@ -1,47 +1,227 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: "Get Started with KT Testing Suite Core"
+sidebarTitle: "Quickstart"
+description: "Write and run your first ExtendScript test inside an Adobe app using KT Testing Suite Core in under five minutes."
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
+KT Testing Suite Core follows a straightforward workflow: write tests in TypeScript, compile them to a single ExtendScript bundle, then execute that bundle inside your target Adobe application. This guide walks through each step from installation to reading your first test results.
 
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
-
-## Prerequisites
-
-Before you begin, you must have:
-
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
-
-## Get started
+<Note>
+  Tests run inside an Adobe host application (After Effects, Premiere Pro,
+  Illustrator, etc.) — not in Node.js. You will need an Adobe CC application
+  installed and the [ExtendScript
+  Debugger](https://marketplace.visualstudio.com/items?itemName=Adobe.extendscript-debug)
+  VS Code extension to execute the compiled test file.
+</Note>
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
 
-    ```bash
-    npm install your-package
-    ```
-  </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
+<Step title="Install the package">
 
-    ```bash
-    your-cli init
-    ```
-  </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
+Add `kt-testing-suite-core` to your project. The package ships its TypeScript source directly (the `main` field points at `src/index.ts`), so `kt-extendscript-builder` can bundle it alongside your own code at build time.
 
-    ```bash
-    your-cli start
-    ```
-  </Step>
+```bash
+npm install kt-testing-suite-core
+```
+
+`kt-extendscript-builder` should already be present in your project as a dev dependency — it provides the `kt-build` CLI that compiles everything. If it is not yet installed:
+
+```bash
+npm install --save-dev kt-extendscript-builder
+```
+
+</Step>
+
+<Step title="Write a test file">
+
+Create a test file anywhere under `src/`. By convention, test files use the `.test.ts` suffix.
+
+```typescript
+// src/tests/my-first.test.ts
+import { describe, it, expect } from "kt-testing-suite-core";
+
+describe("Basic Arithmetic", () => {
+  it("should add two numbers correctly", () => {
+    const result = 1 + 2;
+    expect(result).toBe(3);
+  });
+
+  it("should recognise a string value", () => {
+    const label = "Hello ExtendScript";
+    expect(label).toBeString();
+    expect(label).toContain("ExtendScript");
+  });
+});
+
+describe("Adobe Host Integration", () => {
+  it("should create and remove a composition", () => {
+    const comp = app.project.items.addComp("Test Comp", 1920, 1080, 1, 10, 30);
+    expect(comp).toBeInstanceOf(CompItem);
+    expect(comp.name).toBe("Test Comp");
+    comp.remove();
+  });
+});
+```
+
+The `describe` and `it` calls register suites and tests in a global registry. Nothing executes yet — tests run when `runTests()` is called later.
+
+</Step>
+
+<Step title="Create the test entry point">
+
+You need a single entry file that imports all of your test files and then calls `runTests()`. This is the file `kt-build` will compile into the final bundle.
+
+```typescript
+// src/tests/index.test.ts
+import { runTests } from "kt-testing-suite-core";
+
+import "./my-first.test";
+
+runTests();
+```
+
+`runTests()` collects all suites registered by every imported test file and runs them in order through the default `ConsoleReporter`. You can import as many test files as you need before the `runTests()` call — keep `runTests()` as the very last statement.
+
+</Step>
+
+<Step title="Configure kt.config.json">
+
+`kt-extendscript-builder` reads a `kt.config.json` file in your project root to know what to build. Add (or extend) the `build-tests` and `build-tests-debug` targets so they point at your entry file:
+
+```json
+{
+  "build-tests": {
+    "input": "src/tests/index.test.ts",
+    "output": "dist.test/index.test.js",
+    "watch": false,
+    "uglify": true,
+    "minify": true
+  },
+  "build-tests-debug": {
+    "input": "src/tests/index.test.ts",
+    "output": "dist.test/index.test.js",
+    "watch": false,
+    "uglify": false
+  }
+}
+```
+
+Then wire up the scripts in `package.json`:
+
+```json
+{
+  "scripts": {
+    "build-tests": "kt-build build-tests",
+    "build-tests-debug": "kt-build build-tests-debug"
+  }
+}
+```
+
+</Step>
+
+<Step title="Build your tests">
+
+Run the build script. During development, use the debug build so that stack traces contain readable symbol names:
+
+```bash
+npm run build-tests-debug
+```
+
+When you are done iterating and want a lean production bundle, switch to the minified build:
+
+```bash
+npm run build-tests
+```
+
+Both commands write their output to `dist.test/index.test.js`.
+
+</Step>
+
+<Step title="Run tests via the ExtendScript Debugger">
+
+Open the **ExtendScript Debugger** panel in VS Code (the Adobe extension). Select your target host application (e.g., After Effects) from the application picker, then point the debugger at the compiled output file:
+
+```
+dist.test/index.test.js
+```
+
+Click **Run** (or press the run shortcut). The script executes inside the Adobe host, and results are printed to the ExtendScript console output pane.
+
+</Step>
+
+<Step title="Read the console output">
+
+`ConsoleReporter` — the default reporter — writes a human-readable summary to the ExtendScript console using `$.writeln`. After a successful run you will see output structured like this:
+
+```text
+Suite: Basic Arithmetic
+  Test: should add two numbers correctly
+    ✅ Passed
+  Test: should recognise a string value
+    ✅ Passed
+
+Suite: Adobe Host Integration
+  Test: should create and remove a composition
+    ✅ Passed
+
+Test Results:
+Passed: 3
+Failed: 0
+```
+
+If a test fails, the reporter includes the error message and the source location:
+
+```text
+Suite: Basic Arithmetic
+  Test: should add two numbers correctly
+    ❌ Failed: Expected 4 to be 3
+            src/tests/my-first.test.ts
+            line 6
+
+Test Results:
+Passed: 0
+Failed: 1
+```
+
+For machine-readable output — useful when integrating with a VS Code extension or CI pipeline — pass a `JSONReporter` instance to `runTests()`:
+
+```typescript
+import { runTests, JSONReporter } from "kt-testing-suite-core";
+
+import "./my-first.test";
+
+runTests(undefined, new JSONReporter());
+```
+
+The `JSONReporter` wraps its output in `JSON_OUTPUT_START` / `JSON_OUTPUT_END` markers so that external tooling can reliably extract the JSON payload from mixed console output.
+
+</Step>
+
 </Steps>
 
-<Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
+## Next Steps
 
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
-</Tip>
+Now that your first test is green, explore the rest of the documentation to make the most of the framework.
+
+<CardGroup cols={2}>
+  <Card title="All Matchers" icon="list-check" href="/matchers/overview">
+    The full built-in matcher reference — over 30 matchers covering equality,
+    type, truthiness, size, numerics, error handling, and file I/O.
+  </Card>
+  <Card title="Hooks" icon="arrows-rotate" href="/writing-tests/hooks">
+    Set up and tear down test state with `beforeEach`, `afterEach`,
+    `beforeAll`, and `afterAll`.
+  </Card>
+  <Card title="Reporters" icon="terminal" href="/reporters">
+    Switch between `ConsoleReporter` and `JSONReporter`, or implement your own
+    `TestReporter`.
+  </Card>
+  <Card
+    title="Custom Matchers"
+    icon="puzzle-piece"
+    href="/extensibility/custom-matchers"
+  >
+    Register domain-specific matchers with `extendMatchers` and use Adobe type
+    helpers for type-safe assertions.
+  </Card>
+</CardGroup>

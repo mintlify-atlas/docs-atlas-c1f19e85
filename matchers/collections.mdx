@@ -1,0 +1,285 @@
+---
+title: "Collection and String Matchers: toBeEmpty, toHaveLength, toContain"
+sidebarTitle: "Collections"
+description: "Assert on arrays and strings with toBeEmpty, toHaveLength, toContain, toInclude, toHaveProperty, and toPassAny for flexible multi-condition assertions."
+---
+
+Collection matchers operate on arrays, strings, and plain objects. They let you assert on size, membership, substring presence, and object shape. Additionally, `toPassAny` provides a flexible mechanism for expressing OR-style conditions — the assertion passes as long as at least one condition in the provided list is satisfied.
+
+## `toBeEmpty()`
+
+Asserts that the actual value has a length of zero. The matcher accepts arrays, strings, `null`, and `undefined` — all of which are considered empty when their effective length is zero. Any other type that is not an array or string also fails because it has no meaningful length.
+
+```typescript
+// ✅ Passes
+expect([]).toBeEmpty();
+expect('').toBeEmpty();
+expect(null).toBeEmpty();
+expect(undefined).toBeEmpty();
+
+// ❌ Throws — non-empty array and string
+expect(() => expect([1]).toBeEmpty()).toThrow();
+expect(() => expect('a').toBeEmpty()).toThrow();
+```
+
+<Note>
+  `null` and `undefined` are treated as empty by both `toBeEmpty` and `toHaveLength`. This is intentional for ExtendScript environments where Adobe APIs sometimes return `null` instead of an empty collection.
+</Note>
+
+**Signature:**
+
+```typescript
+toBeEmpty(): this
+```
+
+## `toHaveLength(expected)`
+
+Asserts that the actual value has exactly the given length. Works with arrays and strings. `null` and `undefined` are treated as having a length of `0`, so `toHaveLength(0)` passes for them.
+
+```typescript
+// ✅ Passes
+expect([1, 2, 3]).toHaveLength(3);
+expect('abc').toHaveLength(3);
+expect(null).toHaveLength(0);
+expect(undefined).toHaveLength(0);
+
+// ❌ Throws — wrong length
+expect(() => expect('abc').toHaveLength(2)).toThrow();
+```
+
+**Signature:**
+
+```typescript
+toHaveLength(expected: number): this
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `expected` | `number` | The exact length the actual value must have. |
+
+## `toContain(expected)`
+
+Asserts that the actual string **contains** the expected substring. This is a string-only matcher — the actual value must be a `string`. Use `toInclude` for array membership.
+
+```typescript
+// ✅ Passes
+expect('hello world').toContain('world');
+expect('test').toContain('es');
+
+// ❌ Throws — substring not present
+expect(() => expect('hello').toContain('world')).toThrow();
+```
+
+<Warning>
+  `toContain` only works on strings. Passing an array as the actual value will always fail. Use `toInclude` to check array membership.
+</Warning>
+
+**Signature:**
+
+```typescript
+toContain(expected: string): this
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `expected` | `string` | The substring to search for in the actual string. |
+
+## `toInclude(expected)`
+
+Asserts that the actual array **includes** the expected element using strict equality (`===`) for each comparison. The actual value must be an `Array` — non-array values always fail.
+
+```typescript
+// ✅ Passes
+expect([1, 2, 3]).toInclude(2);
+expect(['a', 'b']).toInclude('a');
+
+// ❌ Throws — element not present
+expect(() => expect([1, 2]).toInclude(3)).toThrow();
+
+// ❌ Throws — not an array
+expect(() => expect('abc').toInclude('a')).toThrow();
+```
+
+**Signature:**
+
+```typescript
+toInclude(expected: any): this
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `expected` | `any` | The element to search for in the actual array using `===`. |
+
+## `toHaveProperty(property, value?)`
+
+Asserts that the actual object has an **own property** matching the given key. When the optional `value` argument is provided, the matcher additionally checks that `object[property] === value`.
+
+```typescript
+// ✅ Passes — property exists
+expect({ a: 1, b: 2 }).toHaveProperty('a');
+expect({ a: 1, b: 2 }).toHaveProperty('b');
+
+// ✅ Passes — property exists with correct value
+expect({ a: 1, b: 2 }).toHaveProperty('a', 1);
+expect({ a: 1, b: 2 }).toHaveProperty('b', 2);
+
+// ❌ Throws — property exists but value is wrong
+expect(() => expect({ a: 1, b: 2 }).toHaveProperty('a', 2)).toThrow();
+expect(() => expect({ a: 1, b: 2 }).toHaveProperty('b', 1)).toThrow();
+
+// ❌ Throws — property does not exist
+expect(() => expect({ a: 1 }).toHaveProperty('b')).toThrow();
+```
+
+<Note>
+  The property check uses `hasOwnProperty`, so inherited properties from the prototype chain do not satisfy the assertion. The value comparison (when provided) uses strict `===` equality.
+</Note>
+
+**Signature:**
+
+```typescript
+toHaveProperty(property: string, value?: any): this
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `property` | `string` | The own property key to check for. |
+| `value` | `any` | *(Optional)* If provided, the property must equal this value via `===`. |
+
+## `toPassAny(conditions)`
+
+Asserts that the actual value satisfies **at least one** condition from the provided array. If every condition fails, the matcher throws a combined error listing all individual failure messages. This is useful when a value may legitimately be one of several types or states.
+
+The `conditions` array accepts three forms per element:
+
+| Form | Example | Description |
+|---|---|---|
+| String (no args) | `'toBeString'` | Calls the named matcher with no argument. |
+| Object (with arg) | `{ toBeGreaterThan: 3 }` | Calls the named matcher with the given value. |
+| `'Not'` suffix | `'toBeStringNot'` | Calls `not()` then the named matcher (strips the `Not` suffix). |
+
+```typescript
+// ✅ Passes — value is a number (first condition)
+expect(5).toPassAny(['toBeNumber', 'toBeString']);
+
+// ✅ Passes — using object form with argument
+expect(5).toPassAny([
+    { toBeGreaterThan: 3 },
+    { toBe: 99 }
+]);
+
+// ✅ Passes — mix of string and object conditions
+expect(5).toPassAny([
+    'toBeString',
+    { toBeGreaterThan: 10 },
+    { toBe: 5 }
+]);
+```
+
+### Using the `Not` suffix
+
+Appending `Not` to a condition string name is equivalent to wrapping that single condition with `not()`. The negation applies only to that condition, not to the overall `toPassAny` assertion:
+
+```typescript
+// ✅ Passes — 5 is NOT a string (toBeStringNot condition passes)
+expect(5).toPassAny([
+    'toBeStringNot',
+    { toBeLessThan: 3 }
+]);
+```
+
+<Warning>
+  Passing an empty array to `toPassAny` always fails with the message `"No conditions provided to toPassAny"`.
+</Warning>
+
+<Tip>
+  `toPassAny` is used internally by `toBeFileOrFolder` to check whether a value is either a `File` or a `Folder`. You can use the same pattern to create your own OR-style assertions without defining a custom matcher.
+</Tip>
+
+**Signature:**
+
+```typescript
+toPassAny(conditions: Array<string | Record<string, any>>): this
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `conditions` | `Array<string \| Record<string, any>>` | One or more condition descriptors. At least one must pass. |
+
+## Full examples from the test suite
+
+<CodeGroup>
+
+```typescript Happy path
+it('toBeEmpty passes with empty arrays and strings', () => {
+    expect([]).toBeEmpty();
+    expect('').toBeEmpty();
+});
+
+it('toHaveLength passes with matching lengths', () => {
+    expect([1, 2, 3]).toHaveLength(3);
+    expect('abc').toHaveLength(3);
+});
+
+it('toContain passes with substrings', () => {
+    expect('hello world').toContain('world');
+    expect('test').toContain('es');
+});
+
+it('toInclude passes with array elements', () => {
+    expect([1, 2, 3]).toInclude(2);
+    expect(['a', 'b']).toInclude('a');
+});
+
+it('toHaveProperty passes with object properties', () => {
+    expect({ a: 1, b: 2 }).toHaveProperty('a');
+    expect({ a: 1, b: 2 }).toHaveProperty('b');
+});
+
+it('toHaveProperty passes with object properties and values', () => {
+    expect({ a: 1, b: 2 }).toHaveProperty('a', 1);
+    expect({ a: 1, b: 2 }).toHaveProperty('b', 2);
+});
+```
+
+```typescript Edge cases
+it('toBeEmpty passes with null and undefined', () => {
+    expect(null).toBeEmpty();
+    expect(undefined).toBeEmpty();
+});
+
+it('toHaveLength passes with zero length for null/undefined', () => {
+    expect(null).toHaveLength(0);
+    expect(undefined).toHaveLength(0);
+});
+```
+
+```typescript Sad path
+it('toBeEmpty fails with non-empty values', () => {
+    expect(() => expect([1]).toBeEmpty()).toThrow();
+    expect(() => expect('a').toBeEmpty()).toThrow();
+});
+
+it('toHaveLength fails with incorrect lengths', () => {
+    expect(() => expect('abc').toHaveLength(2)).toThrow();
+});
+
+it('toContain fails with partial matches', () => {
+    expect(() => expect('hello').toContain('world')).toThrow();
+});
+
+it('toInclude fails with non-members', () => {
+    expect(() => expect([1, 2]).toInclude(3)).toThrow();
+});
+
+it('toHaveProperty fails with correct property but wrong value', () => {
+    expect(() => expect({ a: 1, b: 2 }).toHaveProperty('a', 2)).toThrow();
+    expect(() => expect({ a: 1, b: 2 }).toHaveProperty('b', 1)).toThrow();
+});
+
+it('toHaveProperty fails with missing properties', () => {
+    expect(() => expect({ a: 1 }).toHaveProperty('b')).toThrow();
+});
+```
+
+</CodeGroup>

@@ -1,0 +1,257 @@
+---
+title: "Organizing Matchers with TypeScript Namespaces"
+sidebarTitle: "Namespaces"
+description: "Scope custom matchers in TypeScript namespaces to avoid conflicts and group related assertions. Supports nested namespaces for hierarchical organization."
+---
+
+As your test suite grows, you will likely end up with several groups of domain-specific matchers—one for color validation, another for Adobe layer checks, perhaps a third for file-system assertions. Keeping them in separate TypeScript namespaces prevents name collisions between groups, makes imports self-documenting, and lets two namespaces define a matcher called `toBeOdd` (or anything else) without either one shadowing the other. Each namespace simply exports its own `expect` function, and callers use `Namespace.expect(value).matcherName()` to get the right set.
+
+## Why Use Namespaces
+
+When multiple `Matcher<any>` objects define the same key, the last one passed to `extendMatchers` wins and silently overwrites the earlier definition. Namespaces sidestep this entirely: each namespace has its own isolated `extendMatchers` call, so matchers with the same name coexist without interference.
+
+Common reasons to reach for a namespace:
+
+- **Domain grouping** — `AEMatchers.expect(layer).toBeFootageLayer()` is immediately readable.
+- **Name isolation** — `UI.expect(el).toBeVisible()` and `FileSystem.expect(path).toBeVisible()` can mean entirely different things.
+- **Hierarchical organization** — nested namespaces (`Custom.Nested`) let you sub-divide a domain without a flat naming explosion.
+
+## The Namespace Pattern
+
+The idiomatic pattern is a TypeScript `namespace` block that exports a single `expect` function. That function wraps `extendMatchers` and carries whatever `Matcher<any>` objects belong to this namespace.
+
+```typescript
+import { extendMatchers, type Matcher, Expect } from 'kt-testing-suite-core';
+
+const customMatchers: Matcher<any> = {
+    toBeEvenCustom: function () {
+        var safeActual = this.getSafeActual('number');
+        this.assert(
+            typeof safeActual === 'number' &&
+                !isNaN(safeActual) &&
+                safeActual % 2 === 0,
+            'Expected an even number but got ' + this.toSafeString(this.actual)
+        );
+        return this;
+    },
+    toBeOdd: function () {
+        var safeActual = this.getSafeActual('number');
+        this.assert(
+            typeof safeActual === 'number' &&
+                !isNaN(safeActual) &&
+                safeActual % 2 !== 0,
+            'Expected an odd number but got ' + this.toSafeString(this.actual)
+        );
+        return this;
+    }
+};
+
+namespace Custom {
+    export function expect<T>(actual: T): Expect<T> & Matcher<T> {
+        return extendMatchers(actual, [customMatchers]);
+    }
+}
+```
+
+With this setup, callers use `Custom.expect(value)` and get both `customMatchers` and all built-in matchers in one chain.
+
+## Nested Namespaces
+
+A namespace can itself contain another namespace. Inner namespaces get their own `Matcher<any>` objects and their own `extendMatchers` call, so they are fully independent of the parent even if they share matcher names.
+
+```typescript
+const customNestedMatchers: Matcher<any> = {
+    toBeEvenNested: function () {
+        var safeActual = this.getSafeActual('number');
+        this.assert(
+            typeof safeActual === 'number' &&
+                !isNaN(safeActual) &&
+                safeActual % 2 === 0,
+            'Expected an even number but got ' + this.toSafeString(this.actual)
+        );
+        return this;
+    },
+    // Same name as the parent namespace's matcher — no conflict
+    toBeOdd: function () {
+        var safeActual = this.getSafeActual('number');
+        this.assert(
+            typeof safeActual === 'number' &&
+                !isNaN(safeActual) &&
+                safeActual % 2 !== 0,
+            'Expected an odd number but got ' + this.toSafeString(this.actual)
+        );
+        return this;
+    }
+};
+
+namespace Custom {
+    export function expect<T>(actual: T): Expect<T> & Matcher<T> {
+        return extendMatchers(actual, [customMatchers]);
+    }
+
+    export namespace Nested {
+        export function expect<T>(actual: T): Expect<T> & Matcher<T> {
+            return extendMatchers(actual, [customNestedMatchers]);
+        }
+    }
+}
+```
+
+`Custom.expect` and `Custom.Nested.expect` are completely separate factories. Each carries only its own matchers (plus the always-included built-ins).
+
+## Complete Test Example
+
+The following is taken directly from `src/tests/extend.test.ts` and shows both namespaces exercised side-by-side, including `toPassAny` with custom matcher names and cross-namespace usage.
+
+```typescript
+import {
+    extendMatchers,
+    type Matcher,
+    Expect,
+    expect,
+    describe,
+    it
+} from 'kt-testing-suite-core';
+
+export const customMatchers: Matcher<any> = {
+    toBeEvenCustom: function () {
+        var safeActual = this.getSafeActual('number');
+        this.assert(
+            typeof safeActual === 'number' &&
+                !isNaN(safeActual) &&
+                safeActual % 2 === 0,
+            'Expected an even number but got ' + this.toSafeString(this.actual)
+        );
+        return this;
+    },
+    toBeOdd: function () {
+        var safeActual = this.getSafeActual('number');
+        this.assert(
+            typeof safeActual === 'number' &&
+                !isNaN(safeActual) &&
+                safeActual % 2 !== 0,
+            'Expected an odd number but got ' + this.toSafeString(this.actual)
+        );
+        return this;
+    }
+};
+
+export const customNestedMatchers: Matcher<any> = {
+    toBeEvenNested: function () {
+        var safeActual = this.getSafeActual('number');
+        this.assert(
+            typeof safeActual === 'number' &&
+                !isNaN(safeActual) &&
+                safeActual % 2 === 0,
+            'Expected an even number but got ' + this.toSafeString(this.actual)
+        );
+        return this;
+    },
+    // Can use the same matcher name as the parent namespace without conflict
+    toBeOdd: function () {
+        var safeActual = this.getSafeActual('number');
+        this.assert(
+            typeof safeActual === 'number' &&
+                !isNaN(safeActual) &&
+                safeActual % 2 !== 0,
+            'Expected an odd number but got ' + this.toSafeString(this.actual)
+        );
+        return this;
+    }
+};
+
+namespace Custom {
+    export function expect<T>(actual: T): Expect<T> & Matcher<T> {
+        return extendMatchers(actual, [customMatchers]);
+    }
+
+    export namespace Nested {
+        export function expect<T>(actual: T): Expect<T> & Matcher<T> {
+            return extendMatchers(actual, [customNestedMatchers]);
+        }
+    }
+}
+
+describe('Add namespaces', () => {
+    describe('Custom namespace', () => {
+        it('passes with Custom.toBeEvenCustom', () => {
+            Custom.expect(4).toBeEvenCustom();
+        });
+
+        it('mixes Custom and core matchers, one succeeds', () => {
+            Custom.expect(2).toPassAny([
+                'toBeEvenCustom',
+                'toBeString',
+                'toBeUndefinedNot'
+            ]);
+        });
+
+        it('passes with Custom.toBeEvenCustom on zero', () => {
+            Custom.expect(0).toBeEvenCustom();
+        });
+
+        it('fails with Custom.toBeEvenCustom on odd', () => {
+            expect(() => Custom.expect(3).toBeEvenCustom()).toThrow();
+        });
+
+        it('fails with mixed Custom and core matchers, all fail', () => {
+            expect(() =>
+                Custom.expect(3).toPassAny([
+                    'toBeEvenCustom',
+                    'toBeString',
+                    'toBeNumberNot'
+                ])
+            ).toThrow();
+        });
+    });
+
+    describe('Custom.Nested namespace', () => {
+        it('passes with Custom.Nested.toBeEvenNested', () => {
+            Custom.Nested.expect(4).toBeEvenNested();
+        });
+
+        it('mixes Custom.Nested and core matchers, one succeeds', () => {
+            Custom.Nested.expect(2).toPassAny([
+                'toBeEvenNested',
+                'toBeString',
+                'toBeUndefinedNot'
+            ]);
+        });
+
+        it('can mix parent and nested namespaces in the same test', () => {
+            Custom.Nested.expect(5).toBeOdd();
+            Custom.expect(5).toBeOdd();
+        });
+
+        it('fails with Custom.Nested.toBeEvenNested on odd', () => {
+            expect(() =>
+                Custom.Nested.expect(3).toBeEvenNested()
+            ).toThrow();
+        });
+    });
+});
+```
+
+## Sibling Namespace Name Isolation
+
+Both `Custom` and `Custom.Nested` define a matcher called `toBeOdd`. Because each namespace calls `extendMatchers` independently, there is no conflict—they simply coexist. This is illustrated in the test `'can mix parent and nested namespaces in the same test'`:
+
+```typescript
+// Both call toBeOdd, but each version comes from a different Matcher<any> object
+Custom.Nested.expect(5).toBeOdd();  // uses customNestedMatchers.toBeOdd
+Custom.expect(5).toBeOdd();         // uses customMatchers.toBeOdd
+```
+
+<Note>
+  `toPassAny` accepts an array of matcher names as strings. Custom matcher names work exactly like built-in ones. You can mix them freely in the same `toPassAny` call:
+
+  ```typescript
+  Custom.expect(2).toPassAny(['toBeEvenCustom', 'toBeString', 'toBeUndefinedNot']);
+  ```
+
+  As long as at least one matcher in the list passes, the assertion succeeds.
+</Note>
+
+<Tip>
+  For large projects, keep each namespace's matcher object in its own file (e.g., `matchers/color-matchers.ts`) and import them into the namespace declaration file. This keeps individual matcher files focused and makes the namespace file a thin composition layer.
+</Tip>

@@ -1,0 +1,286 @@
+---
+title: "Lifecycle Hooks: beforeEach, afterEach, beforeAll, afterAll"
+sidebarTitle: "Hooks"
+description: "Use beforeEach, afterEach, beforeAll, and afterAll to set up and tear down state around tests. Covers nested suite hook execution order."
+---
+
+Hooks let you run setup and teardown logic at defined points in the test lifecycle without repeating that code inside every `it()` block. KT Testing Suite Core supports four hook types that cover both per-test and per-suite lifecycles. All four are registered by calling them inside a `describe()` callback, and all four throw `Error: <hook>() must be called inside a describe()` if invoked at module scope.
+
+## Hook Types at a Glance
+
+<CardGroup cols={2}>
+  <Card title="beforeEach" icon="arrow-right-to-bracket">
+    Runs once **before every individual test** in the current suite. Use it to reset mutable state so each test starts from a known baseline.
+  </Card>
+  <Card title="afterEach" icon="arrow-right-from-bracket">
+    Runs once **after every individual test** in the current suite, even if the test fails. Use it to clean up side-effects from the test body.
+  </Card>
+  <Card title="beforeAll" icon="play">
+    Runs **once before all tests** in the suite begin. Use it for expensive one-time setup such as creating a composition or opening a document.
+  </Card>
+  <Card title="afterAll" icon="stop">
+    Runs **once after all tests** in the suite have finished. Use it to release resources created in `beforeAll`.
+  </Card>
+</CardGroup>
+
+## `beforeEach` and `afterEach`
+
+Per-test hooks run around every `it()` in the suite where they are registered. They are the right tool for resetting a counter, restoring a variable, or any other state that must be fresh for each test.
+
+```typescript
+// src/tests/beforeAfterEach.test.ts
+import { describe, it, expect, beforeEach, afterEach } from 'kt-testing-suite-core';
+
+describe('beforeEach and afterEach hooks', () => {
+  let counter = 0;
+
+  beforeEach(() => {
+    counter += 1; // Increment counter before each test
+  });
+
+  afterEach(() => {
+    counter = 0; // Reset counter after each test
+  });
+
+  it('should run beforeEach before the test', () => {
+    expect(counter).toBe(1); // Counter should be incremented by beforeEach
+  });
+
+  it('should reset counter after each test using afterEach', () => {
+    expect(counter).toBe(1); // Counter should be reset and incremented again
+  });
+});
+```
+
+The second test sees `counter === 1` because `afterEach` reset it to `0` after the first test, and then `beforeEach` incremented it to `1` again before the second test ran.
+
+## `beforeAll` and `afterAll`
+
+Suite-level hooks run exactly once per suite — `beforeAll` fires before the first test starts, and `afterAll` fires after the last test finishes. They are ideal for expensive setup that would be wasteful to repeat, such as initialising a shared data structure.
+
+```typescript
+// src/tests/beforeAfterAll.test.ts
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'kt-testing-suite-core';
+
+describe('beforeAll and afterAll hooks', () => {
+  let suiteSetup = false;
+  let testCounter = 0;
+
+  beforeAll(() => {
+    suiteSetup = true;
+  });
+
+  afterAll(() => {
+    suiteSetup = false;
+  });
+
+  beforeEach(() => {
+    testCounter++;
+  });
+
+  it('should run beforeAll once before all tests', () => {
+    expect(suiteSetup).toBe(true);
+    expect(testCounter).toBe(1);
+  });
+
+  it('should not run beforeAll again for second test', () => {
+    expect(suiteSetup).toBe(true); // Still true from beforeAll
+    expect(testCounter).toBe(2);   // beforeEach ran again
+  });
+});
+```
+
+`suiteSetup` stays `true` for both tests because `beforeAll` ran only once. `testCounter`, by contrast, increments for every test because it is driven by `beforeEach`.
+
+## Shared Resource Management
+
+`beforeAll` and `afterAll` are the canonical place to manage shared resources. Because the resource is created once, tests can safely observe mutations from previous tests within the same suite.
+
+```typescript
+describe('shared resource management', () => {
+  let sharedResource: { data: string[]; initialized: boolean } | null = null;
+
+  beforeAll(() => {
+    sharedResource = {
+      data: ['initial'],
+      initialized: true
+    };
+  });
+
+  afterAll(() => {
+    sharedResource = null;
+  });
+
+  it('should have access to shared resource', () => {
+    expect(sharedResource).not().toBeNull();
+    expect(sharedResource!.initialized).toBe(true);
+    expect(sharedResource!.data).toHaveLength(1);
+
+    // Modify shared resource
+    sharedResource!.data.push('test1');
+  });
+
+  it('should see modifications from previous test', () => {
+    expect(sharedResource).not().toBeNull();
+    expect(sharedResource!.data).toHaveLength(2);
+    expect(sharedResource!.data[1]).toBe('test1');
+  });
+});
+```
+
+<Warning>
+  Because tests within a suite share the same resource instance, the order in which `it()` blocks run matters when one test mutates the resource. Avoid depending on mutation order across suites.
+</Warning>
+
+## Verifying Execution Order
+
+The `execution order verification` suite in the test file demonstrates exactly when each hook fires relative to test bodies:
+
+```typescript
+describe('execution order verification', () => {
+  let executionOrder: string[] = [];
+
+  beforeAll(() => {
+    executionOrder.push('beforeAll');
+  });
+
+  afterAll(() => {
+    executionOrder.push('afterAll');
+  });
+
+  beforeEach(() => {
+    executionOrder.push('beforeEach');
+  });
+
+  afterEach(() => {
+    executionOrder.push('afterEach');
+  });
+
+  it('should execute hooks in correct order', () => {
+    executionOrder.push('test1');
+    // At this point: beforeAll, beforeEach, test1
+    expect(executionOrder.length).toBe(3);
+    expect(executionOrder[0]).toBe('beforeAll');
+    expect(executionOrder[1]).toBe('beforeEach');
+    expect(executionOrder[2]).toBe('test1');
+  });
+
+  it('should maintain execution order pattern', () => {
+    executionOrder.push('test2');
+    // At this point: beforeAll, beforeEach, test1, afterEach, beforeEach, test2
+    expect(executionOrder.length).toBe(6);
+    expect(executionOrder[3]).toBe('afterEach');
+    expect(executionOrder[4]).toBe('beforeEach');
+    expect(executionOrder[5]).toBe('test2');
+  });
+});
+```
+
+The full sequence for a two-test suite is:
+
+```
+beforeAll
+  beforeEach → test1 → afterEach
+  beforeEach → test2 → afterEach
+afterAll
+```
+
+## Nested Hooks
+
+When `beforeEach` and `afterEach` are registered in both a parent and a child `describe`, the runner builds a chain by walking up the `parent` references on the suite. The execution direction differs between setup and teardown hooks:
+
+| Hook        | Execution order             |
+| ----------- | --------------------------- |
+| `beforeEach` | Outer (parent) → inner (child) |
+| `afterEach`  | Inner (child) → outer (parent) |
+| `beforeAll`  | Runs independently per suite, no inheritance |
+| `afterAll`   | Runs independently per suite, no inheritance |
+
+The following example from the test suite shows this clearly. The outer `beforeEach` adds `1`, then the nested `beforeEach` adds `10`, so the test inside the nested suite sees `counter === 11`:
+
+```typescript
+describe('beforeEach and afterEach hooks', () => {
+  let counter = 0;
+
+  beforeEach(() => {
+    counter += 1; // Outer: runs first
+  });
+
+  afterEach(() => {
+    counter = 0; // Outer: runs last (after nested afterEach)
+  });
+
+  describe('nested describe block', () => {
+    beforeEach(() => {
+      counter += 10; // Inner: runs after outer beforeEach
+    });
+
+    afterEach(() => {
+      counter -= 10; // Inner: runs before outer afterEach
+    });
+
+    it('should inherit hooks from parent and run nested hooks', () => {
+      expect(counter).toBe(11); // Parent beforeEach (1) + nested beforeEach (10)
+    });
+  });
+});
+```
+
+<Note>
+  `beforeAll` and `afterAll` do **not** chain across parent/child suites. Each suite's `beforeAll` runs independently before that suite's own tests start, regardless of what the parent suite registered.
+</Note>
+
+The following example shows that variables set by a parent `beforeAll` are still accessible inside a nested suite's tests (because they are in the same closure scope), and each suite's own `beforeAll`/`afterAll` pair runs independently:
+
+```typescript
+describe('beforeAll and afterAll hooks', () => {
+  let suiteSetup = false;
+  let testCounter = 0;
+
+  beforeAll(() => { suiteSetup = true; });
+  afterAll(() => { suiteSetup = false; });
+  beforeEach(() => { testCounter++; });
+
+  describe('nested suite', () => {
+    let nestedSetup = false;
+
+    beforeAll(() => { nestedSetup = true; });
+    afterAll(() => { nestedSetup = false; });
+
+    it('should inherit parent beforeAll and run nested beforeAll', () => {
+      expect(suiteSetup).toBe(true);   // From parent closure
+      expect(nestedSetup).toBe(true);  // From nested beforeAll
+    });
+  });
+});
+```
+
+## Error Handling in Hooks
+
+If a hook function throws, the runner catches the error, prints a warning to the ExtendScript console via `$.writeln`, and continues execution. Tests are not skipped because of a failing hook — the runner reports them normally.
+
+```
+⚠️ Error in beforeAll: Setup failed
+```
+
+This behaviour is demonstrated by the error-handling suite:
+
+```typescript
+describe('beforeAll and afterAll error handling', () => {
+  let setupRan = false;
+
+  beforeAll(() => {
+    setupRan = true;
+    throw new Error('Setup failed'); // Warning is printed; tests still run
+  });
+
+  it('should run test even if beforeAll throws', () => {
+    expect(setupRan).toBe(true); // beforeAll executed despite the error
+    expect(true).toBe(true);     // Test runs normally
+  });
+});
+```
+
+<Tip>
+  If a shared resource fails to initialise inside `beforeAll`, guard your test bodies with a null-check rather than relying on the test to throw — this produces a clearer failure message than an unexpected `TypeError`.
+</Tip>
